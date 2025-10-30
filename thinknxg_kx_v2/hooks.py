@@ -1,7 +1,7 @@
 app_name = "thinknxg_kx_v2"
-app_title = "Thinknxg Kx V2"
-app_publisher = "Thinknxg"
-app_description = "Thinknxg Kx V2"
+app_title = "thinkNXG KX V2"
+app_publisher = "Kreatao - thinkNXG"
+app_description = "thinkNXG KX V2"
 app_email = "thinknxgkx@gmail.com"
 app_license = "mit"
 
@@ -23,7 +23,14 @@ app_license = "mit"
 
 # Includes in <head>
 # ------------------
-
+fixtures = [
+    {
+    "doctype": "Custom Field",
+        "filters": {
+            "module": ["in", ["Thinknxg Kx V2"]]
+            }
+    },
+]
 # include js, css files in header of desk.html
 # app_include_css = "/assets/thinknxg_kx_v2/css/thinknxg_kx_v2.css"
 # app_include_js = "/assets/thinknxg_kx_v2/js/thinknxg_kx_v2.js"
@@ -147,7 +154,26 @@ app_license = "mit"
 
 # Scheduled Tasks
 # ---------------
-
+scheduler_events = {
+    "cron": {
+        "52 23 * * *": [  # Daily at 11:52
+            "thinknxg_kx_v2.thinknxg_kx_v2.custom_script.advance_deposit.main"
+        ],
+        "54 23 * * *": [  # Daily at 11:54
+            "thinknxg_kx_v2.thinknxg_kx_v2.custom_script.supplier_creation.main",
+        ],
+        "56 23 * * *": [  # Daily at 11:56
+            "thinknxg_kx_v2.thinknxg_kx_v2.custom_script.pharmacy_bill.main",
+            "thinknxg_kx_v2.thinknxg_kx_v2.custom_script.pharmacy_refund.main",
+            # "thinknxg_kx_v2.thinknxg_kx_v2.custom_script.due_settlement.main",
+            "thinknxg_kx_v2.thinknxg_kx_v2.custom_script.grn_creation.main",
+            "thinknxg_kx_v2.thinknxg_kx_v2.custom_script.advance_deposit_refund.main",
+            "thinknxg_kx_v2.thinknxg_kx_v2.custom_script.grn_return.main",
+            "thinknxg_kx_v2.thinknxg_kx_v2.custom_script.stock_transfer.main",
+            "thinknxg_kx_v2.thinknxg_kx_v2.custom_script.ar_bill_settlement.main",
+        ],
+    }
+}
 # scheduler_events = {
 # 	"all": [
 # 		"thinknxg_kx_v2.tasks.all"
