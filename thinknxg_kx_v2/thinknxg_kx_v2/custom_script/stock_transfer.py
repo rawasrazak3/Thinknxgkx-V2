@@ -139,7 +139,7 @@ def get_or_create_cost_center2(facility_name):
     return cost_center_name  # Always return the full cost center name with suffix
 
 def get_or_create_stock_account1(facility_name):
-    stock_acc_name = f"STOCK IN HAND {facility_name} - OP"
+    stock_acc_name = f"STOCK IN HAND - {facility_name} - OP"
     
     # Check if the cost center already exists by full name
     existing = frappe.db.exists("Account", stock_acc_name)
