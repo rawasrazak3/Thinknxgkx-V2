@@ -8,8 +8,11 @@
   "token_url",
   "billing_url",
   "facility_id",
+  "facility_id_details",
   "no_of_days",
   "date",
+  "select_all",
+  "unselect_all",
   "table_aozt"
  ],
  "fields": [
@@ -42,13 +45,29 @@
    "fieldname": "table_aozt",
    "fieldtype": "Table",
    "options": "Karexpert  Table"
+  },
+  {
+   "fieldname": "select_all",
+   "fieldtype": "Button",
+   "label": "Select All"
+  },
+  {
+   "fieldname": "unselect_all",
+   "fieldtype": "Button",
+   "label": "Unselect All"
+  },
+  {
+   "fieldname": "facility_id_details",
+   "fieldtype": "Table",
+   "label": "Facility ID Details",
+   "options": "Facility ID"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2025-08-19 21:42:35.078971",
+ "modified": "2025-11-02 13:36:43.974615",
  "modified_by": "Administrator",
  "module": "Thinknxg Kx V2",
  "name": "Karexpert Settings",

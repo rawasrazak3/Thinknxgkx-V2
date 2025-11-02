@@ -126,7 +126,7 @@ def get_or_create_stock_account(facility_name):
     # Create new cost center with full cost_center_name as document name
     stock_acc = frappe.get_doc({
         "doctype": "Account",
-        "account_name": stock_acc_name,  
+        "account_name": f"STOCK IN HAND - {facility_name}",  
         "account_type": "Stock",           
         "parent_account": parent_cost_center,
         "company": "Oxygen Pharmacy"
@@ -242,7 +242,8 @@ def create_journal_entry_from_pharmacy_refund(refund_data):
     item_rate = refund_data["patient_refund_amount"]
     tax_amount = refund_data.get("tax", 0)
     authorized_amount = refund_data.get("authorized_amount", 0)
-    discount_amount = refund_data.get("selling_amount", 0) - refund_data.get("total_amount", 0)
+    discount_amount = refund_data.get("discount", 0)
+    round_off = refund_data.get("roundOff", 0)
 
     # --- Fetch accounts dynamically from Company ---
     company = frappe.defaults.get_user_default("Company")
@@ -357,6 +358,8 @@ def create_journal_entry_from_pharmacy_refund(refund_data):
         "custom_admission_type": refund_data["admissionType"],
         "company": company,
         "custom_store": store_name,
+        "custom_discount":discount_amount,
+        "custom_round_off": round_off,
         "custom_facility_name": facility_name,
         "user_remark": f"Pharmacy Refund for bill no {bill_no}",
         "accounts": je_accounts

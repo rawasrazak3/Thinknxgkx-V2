@@ -152,7 +152,7 @@ def get_or_create_stock_account1(facility_name):
     # Create new cost center with full cost_center_name as document name
     stock_acc = frappe.get_doc({
         "doctype": "Account",
-        "account_name": stock_acc_name,               
+        "account_name": f"STOCK IN HAND - {facility_name}",               
         "parent_account": parent_cost_center,
         "company": "Oxygen Pharmacy"
     })
@@ -176,7 +176,7 @@ def get_or_create_stock_account2(facility_name):
     # Create new cost center with full cost_center_name as document name
     stock_acc = frappe.get_doc({
         "doctype": "Account",
-        "account_name": facility_name,               
+        "account_name": f"STOCK IN HAND - {facility_name}",               
         "parent_account": parent_cost_center,
         "company": "Oxygen Pharmacy"
     })

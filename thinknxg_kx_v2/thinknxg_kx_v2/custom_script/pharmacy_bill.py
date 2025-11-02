@@ -197,7 +197,7 @@ def get_or_create_stock_account(facility_name):
     # Create new cost center with full cost_center_name as document name
     stock_acc = frappe.get_doc({
         "doctype": "Account",
-        "account_name": stock_acc_name,  
+        "account_name": f"STOCK IN HAND - {facility_name}",  
         "account_type": "Stock",           
         "parent_account": parent_cost_center,
         "company": "Oxygen Pharmacy"
@@ -273,6 +273,61 @@ def main():
 
     except Exception as e:
         frappe.log_error(f"Error: {e}")
+# @frappe.whitelist()
+# def main():
+#     try:
+#         billing_type = "OP PHARMACY BILLING"
+#         settings = frappe.get_single("Karexpert Settings")
+
+#         # Get all facility headers from fetch_api_details
+#         facility_headers = fetch_api_details(billing_type)
+
+#         # Prepare date range
+#         to_date_raw = settings.get("date")
+#         if to_date_raw:
+#             t_date = getdate(to_date_raw)
+#         else:
+#             t_date = add_days(nowdate(), -4)
+
+#         no_of_days = cint(settings.get("no_of_days") or 25)
+#         f_date = add_days(t_date, -no_of_days)
+
+#         gmt_plus_4 = timezone(timedelta(hours=4))
+#         from_date = int(datetime.combine(f_date, time.min, tzinfo=gmt_plus_4).timestamp() * 1000)
+#         to_date = int(datetime.combine(t_date, time.max, tzinfo=gmt_plus_4).timestamp() * 1000)
+
+#         print(f"Processing from {from_date} to {to_date}")
+
+#         # Loop through all facilities
+#         for facility_data in facility_headers:
+#             facility_id = facility_data["facility_id"]
+#             headers_token = facility_data["headers"]
+
+#             frappe.log(f"Fetching data for Facility ID: {facility_id}")
+
+#             # Get JWT token for this facility
+#             response = requests.post(settings.get("token_url"), headers=headers_token)
+#             if response.status_code != 200:
+#                 frappe.log_error(f"Failed to get token for {facility_id}: {response.text}")
+#                 continue
+
+#             jwt_token = response.json().get("jwttoken")
+
+#             # Fetch billing data for this facility
+#             billing_data = fetch_op_billing(jwt_token, from_date, to_date)
+
+#             if not billing_data.get("jsonResponse"):
+#                 frappe.log(f"No data for Facility: {facility_id}")
+#                 continue
+
+#             for billing in billing_data.get("jsonResponse", []):
+#                 create_journal_entry_from_billing(billing["pharmacy_billing"])
+
+#             frappe.log(f"Completed processing for Facility: {facility_id}")
+
+#     except Exception as e:
+#         frappe.log_error(f"Error in Karexpert Billing Sync: {e}")
+
 
 if __name__ == "__main__":
     main()
@@ -308,7 +363,8 @@ def create_journal_entry_from_billing(billing_data):
     cost_center = get_or_create_cost_center(store_name)
 
     # Amounts
-    discount_amount = billing_data["selling_amount"] - billing_data["total_amount"]
+    # discount_amount = billing_data["selling_amount"] - billing_data["total_amount"]
+    discount_amount = billing_data["discount"]
     round_off = billing_data.get("roundOff", 0)
     if round_off < 0:
         item_rate = billing_data["total_amount"]+round_off
