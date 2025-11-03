@@ -20,26 +20,22 @@ print("---billing row",billing_row)
  
 headers_token = fetch_api_details(billing_type)
 
-def get_jwt_token():
-    response = requests.post(TOKEN_URL, headers=headers_token)
+def get_jwt_token_for_facility(headers):
+    response = requests.post(TOKEN_URL, headers=headers)
     if response.status_code == 200:
         return response.json().get("jwttoken")
     else:
-        frappe.throw(f"Failed to fetch JWT token: {response.status_code} - {response.text}")
+        frappe.throw(f"Failed to fetch JWT token for facility {headers['facilityId']}: {response.status_code} - {response.text}")
 
-def fetch_op_billing(jwt_token, from_date, to_date):
-    headers_billing = {
-        "Content-Type": headers_token["Content-Type"],
-        "clientCode": headers_token["clientCode"],
-        "integrationKey": headers_token["integrationKey"],
-        "Authorization": f"Bearer {jwt_token}"
-    }
+def fetch_op_billing(jwt_token, from_date, to_date, headers):
+    headers_billing = headers.copy()
+    headers_billing["Authorization"] = f"Bearer {jwt_token}"
     payload = {"requestJson": {"FROM": from_date, "TO": to_date}}
     response = requests.post(BILLING_URL, headers=headers_billing, json=payload)
     if response.status_code == 200:
         return response.json()
     else:
-        frappe.throw(f"Failed to fetch GRN data: {response.status_code} - {response.text}")
+        frappe.throw(f"Failed to fetch Supplier data for facility {headers['facilityId']}: {response.status_code} - {response.text}")
 
 
 def supplier_creation(billing_data):
@@ -59,6 +55,13 @@ def supplier_creation(billing_data):
         supplier_name = billing_data.get("name")
         print("---sup name---",supplier_name)
         address = billing_data.get("primary_address")
+        supplier_category_details = billing_data.get("supplierCategoryList", [])
+        gstNo = billing_data.get("gstNo")
+        panId = billing_data.get("panId")
+        dlNo = billing_data.get("dlNo")
+        msmetype = billing_data.get("msmetype")
+        # gstNo = billing_data.get("gstNo")
+        # gstNo = billing_data.get("gstNo")
         address_line1 = address.get("street1")
         address_line2 = address.get("street2")
         city = address.get("city")
@@ -72,6 +75,13 @@ def supplier_creation(billing_data):
             print("---no sup name---")
             frappe.log_error("Missing supplier code or name in API response.", "Supplier Creation Error")
             return
+
+        supplier_category_child = []
+        for cat in supplier_category_details:
+            if cat.get("text"):
+                supplier_category_child.append({
+                    "supplier_category": cat.get("text")  # <-- this must match child table fieldname
+                })
 
         # Check if supplier already exists
         existing_supplier = frappe.db.exists("Supplier", {"custom_supplier_code": supplier_code, "disabled": 0})
@@ -87,6 +97,11 @@ def supplier_creation(billing_data):
             "custom_supplier_code": supplier_code,
             "supplier_group": "All Supplier Groups",  # Change if needed
             "supplier_type": "Company",
+            "custom_supplier_category": supplier_category_child,
+            "custom_drug_license_no": dlNo or "",
+            "tax_id": gstNo or "",
+            "custom_pan_no": panId or "",
+            "custom_msme_type": msmetype or "",
         })
         supplier.insert(ignore_permissions=True)
         print("---sup data inserted--")
@@ -127,37 +142,49 @@ def supplier_creation(billing_data):
 @frappe.whitelist()
 def main():
     try:
-        print("--main--")
-        jwt_token = get_jwt_token()
-        frappe.log("JWT Token fetched successfully.")
-
-        # Fetch dynamic date and number of days from settings
         settings = frappe.get_single("Karexpert Settings")
-        # Get to_date from settings or fallback to nowdate() - 4 days
+        billing_row = frappe.get_value(
+            "Karexpert  Table",
+            {"billing_type": billing_type},
+            ["client_code", "integration_key", "x_api_key"],
+            as_dict=True
+        )
+
+        facility_list = frappe.get_all("Facility ID", filters={"parent": settings.name}, fields=["facility_id"])
+
+        # Dates
         to_date_raw = settings.get("date")
-        if to_date_raw:
-            t_date = getdate(to_date_raw)
-        else:
-            t_date = add_days(nowdate(), -4)
-
-        # Get no_of_days from settings and calculate from_date
-        no_of_days = cint(settings.get("no_of_days") or 25)  # default 3 days if not set
+        t_date = getdate(to_date_raw) if to_date_raw else add_days(nowdate(), -4)
+        no_of_days = cint(settings.get("no_of_days") or 25)
         f_date = add_days(t_date, -no_of_days)
-        # Define GMT+4 timezone
         gmt_plus_4 = timezone(timedelta(hours=4))
-
-        # Convert to timestamps in milliseconds for GMT+4
         from_date = int(datetime.combine(f_date, time.min, tzinfo=gmt_plus_4).timestamp() * 1000)
         to_date = int(datetime.combine(t_date, time.max, tzinfo=gmt_plus_4).timestamp() * 1000)
-        billing_data = fetch_op_billing(jwt_token, from_date, to_date)
 
-        frappe.log("GRN Billing data fetched successfully.")
+        for row in facility_list:
+            facility_id = row["facility_id"]
 
-        for billing in billing_data.get("jsonResponse", []):
-            supplier_creation(billing)
+            # Prepare headers for this facility
+            headers_token = {
+                "Content-Type": "application/json",
+                "clientCode": billing_row["client_code"],
+                "integrationKey": billing_row["integration_key"],
+                "facilityId": facility_id,
+                "messageType": "request",
+                "x-api-key": billing_row["x_api_key"]
+            }
+
+            jwt_token = get_jwt_token_for_facility(headers_token)
+            billing_data = fetch_op_billing(jwt_token, from_date, to_date, headers_token)
+            frappe.log(f"Supplier data fetched for facility {facility_id}")
+
+            for billing in billing_data.get("jsonResponse", []):
+                supplier_creation(billing)
 
     except Exception as e:
-        frappe.log_error(f"Error: {e}")
+        frappe.log_error(f"Error in Supplier Creation: {frappe.get_traceback()}")
+        frappe.throw(f"Supplier Sync Failed: {e}")
+
 
 if __name__ == "__main__":
     main()
