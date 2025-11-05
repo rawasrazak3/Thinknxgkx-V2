@@ -3,11 +3,11 @@ import requests
 import json
 from frappe.utils import nowdate
 from datetime import datetime
-from datetime import datetime, timedelta,  timezone, time
 from frappe.utils import getdate, add_days, cint
+from datetime import datetime, timedelta, time, timezone
 from thinknxg_kx_v2.thinknxg_kx_v2.doctype.karexpert_settings.karexpert_settings import fetch_api_details
 
-billing_type = "ADVANCE DEPOSIT REFUND"
+billing_type = "DUE SETTLEMENT"
 settings = frappe.get_single("Karexpert Settings")
 TOKEN_URL = settings.get("token_url")
 BILLING_URL = settings.get("billing_url")
@@ -36,7 +36,7 @@ def main():
     try:
         settings = frappe.get_single("Karexpert Settings")
 
-        # ✅ Collect all facility IDs from child table
+        # Collect all facility IDs from child table
         facility_list = [row.facility_id for row in settings.get("facility_id_details") or [] if row.facility_id]
 
         if not facility_list:
@@ -55,7 +55,7 @@ def main():
 
         all_billing_data = []
 
-        # ✅ Loop through each facility
+        # Loop through each facility
         for row in settings.get("facility_id_details") or []:
             facility_id = row.facility_id
             if not facility_id:
@@ -64,7 +64,7 @@ def main():
             # Prepare headers for this facility
             billing_row = frappe.get_value(
                 "Karexpert  Table",
-                {"billing_type": "ADVANCE DEPOSIT REFUND"},
+                {"billing_type": "DUE SETTLEMENT"},
                 ["client_code", "integration_key", "x_api_key"],
                 as_dict=True
             )
@@ -81,8 +81,8 @@ def main():
             # Fetch JWT for this facility
             jwt_token = get_jwt_token_for_headers(headers)
 
-            frappe.log(f"Fetching advance deposit refund for Facility ID: {facility_id}")
-            print("Fetching advance deposit refund for Facility ID",facility_id)
+            frappe.log(f"Fetching AR bill settlement for Facility ID: {facility_id}")
+            print("Fetching aAR bill settlement for Facility ID",facility_id)
             billing_data = fetch_advance_billing(jwt_token, from_date, to_date, headers)
 
             if billing_data and "jsonResponse" in billing_data:
@@ -92,12 +92,12 @@ def main():
 
         # ✅ Process all collected billing data
         for billing in all_billing_data:
-            create_advance_refund_entry(billing["advance_refund"])
+            create_journal_entry(billing['due_settlement'])
 
-        frappe.log("All facility billing data processed successfully.")
+        frappe.log("All facility AR bill settlement data processed successfully.")
 
     except Exception as e:
-        frappe.log_error(f"Error in Advance deposit Fetch: {e}")
+        frappe.log_error(f"Error in AR bill settlement Fetch: {e}")
 
 
 def get_jwt_token_for_headers(headers):
@@ -116,130 +116,138 @@ def get_jwt_token_for_headers(headers):
 if __name__ == "__main__":
     main()
 
-def create_advance_refund_entry(billing_data):
+@frappe.whitelist()
+def create_journal_entry(billing_data):
     try:
-        mode_of_payment = billing_data["payment_transaction_details"][0]["payment_mode_display"]
-
-        mode_of_payment_accounts = frappe.get_all(
-            "Mode of Payment Account",
-            filters={"parent": mode_of_payment},
-            fields=["default_account"],
-            limit=1
-        )
-
-        if not mode_of_payment_accounts:
-            return f"Failed: No default account found for mode of payment {mode_of_payment}"
+        frappe.logger().info(f"[JE DEBUG] Incoming billing_data: {billing_data}")
+        # frappe.msgprint(f"[DEBUG] Received billing_data: {billing_data}")
+        
+        ar_details = billing_data
+        bill_no = ar_details.get("bill_no")
+        admission_id = ar_details.get("admissionId")
+        receipt_no = ar_details.get("receipt_no")
+        uhid = ar_details.get("uhId")
+        payment_details = ar_details.get("payment_transaction_details", [])
+        rec_amount = ar_details.get("received_amount")
+        customer_name = ar_details.get("payer_name") or billing_data.get("customer")
+        payer_type = ar_details.get("payer_type") or billing_data["payer_type"]
+        customer = get_or_create_customer(customer_name,payer_type)
         # --- Fetch accounts dynamically from Company ---
         company = frappe.defaults.get_user_default("Company")
         company_doc = frappe.get_doc("Company", company)
+
+        debit_account = company_doc.default_receivable_account
+        credit_account = company_doc.default_income_account
         cash_account = company_doc.default_cash_account
         bank_account = company_doc.default_bank_account
-        # Use fixed account based on mode of payment
-        if mode_of_payment.lower() == "cash":
-            paid_to_account = cash_account
-        else:
-            paid_to_account = bank_account
+        frappe.logger().info(f"[JE DEBUG] Bill No: {bill_no}")
+        # frappe.msgprint(f"[DEBUG] Bill No: {bill_no}")
+        frappe.logger().info(f"[JE DEBUG] Customer Name: {customer_name}")
+        # frappe.msgprint(f"[DEBUG] Customer Name: {customer_name}")
 
-        paid_to_account_currency = frappe.db.get_value("Account", paid_to_account, "account_currency")
+        if not customer_name:
+            return "Failed: No customer/payer found in billing data"
 
-        transaction_date_time = billing_data["payment_transaction_details"][0].get("transaction_date_time")
-        if not transaction_date_time:
-            return "Failed: Transaction Date is missing."
 
-        # Define GMT+4 offset
+        # Date conversion
+        date = ar_details["g_creation_time"]
+        datetimes = date / 1000.0
+
+        # Define GMT+4
         gmt_plus_4 = timezone(timedelta(hours=4))
-        dt = datetime.fromtimestamp(transaction_date_time / 1000.0, gmt_plus_4)
-        print("formt", dt)
+        dt = datetime.fromtimestamp(datetimes, gmt_plus_4)
         formatted_date = dt.strftime('%Y-%m-%d')
-        print("date--", formatted_date)
 
-        reference_no = billing_data.get("receipt_no")
-        if not reference_no:
-            return "Failed: Reference No is missing."
+        frappe.logger().info(f"[JE DEBUG] Formatted Posting Date: {formatted_date}")
+        # frappe.msgprint(f"[DEBUG] Posting Date: {formatted_date}")
 
-        existing_je = frappe.get_value(
-            "Journal Entry",
-            {
-                "bill_no": reference_no
-            },
-            "name"
-        )
+        # Initialize JE entries
+        je_entries = []
 
-        if frappe.db.exists("Journal Entry", {"custom_bill_number": reference_no}):
-            return f"Skipped: Journal Entry already exists."
-
-
-    
-        transaction_id = ""
-        for tx in billing_data.get("payment_transaction_details", []):
-            if tx.get("transaction_id"):
-                transaction_id = tx.get("transaction_id")
-                break
-
-        frappe.log_error("Transaction ID: " + str(transaction_id), "Advance Billing Log")
-
-
-        # # Check for existing Journal Entry
-        # existing_je = frappe.get_value(
+        # #Duplicate check: same Employee, Date, and Amount
+        # existing_je = frappe.db.exists(
         #     "Journal Entry",
-        #     {"cheque_no": reference_no, "posting_date": formatted_date},
-        #     "name"
+        #     {
+        #         "posting_date": formatted_date,
+        #         "docstatus": 1,  # submitted
+        #         "user_remark": f"AR Settlement for Bill No: {bill_no}"
+        #     }
         # )
         # if existing_je:
-        #     return f"Skipped: Journal Entry {existing_je} already exists."
+        #     frappe.logger().info(f"[JE DEBUG] Duplicate found, skipping JE creation. Existing JE: {existing_je}")
+        #     return f"Skipped: Journal Entry {existing_je} already exists"
 
-        customer_name = billing_data.get("patient_name")
-        payer_type = billing_data["payer_type"]
-        customer = get_or_create_customer(customer_name,payer_type)
+        #Credit the payer (customer)
+        credit_entry = {
+            "account": debit_account,  # Update to actual customer account if dynamic
+            "party_type": "Customer",
+            "party": customer,
+            "credit_in_account_currency": rec_amount,
+            "debit_in_account_currency": 0
+        }
+        je_entries.append(credit_entry)
+        frappe.logger().info(f"[JE DEBUG] Added Credit Entry: {credit_entry}")
 
-        custom_advance_type = billing_data.get("advance_type")
-        custom_patient_type = billing_data.get("patient_type_display")
-        custom_uh_id = billing_data.get("uhId")
-        amount = billing_data.get("amount")
+        #Debit each payment mode from payment_details
+        for payment in payment_details:
+            mode = payment.get("payment_mode_code", "").lower()
+            amount = payment.get("amount", 0)
 
-        # Fetch default receivable account or use a custom "Customer Advances" account
-        # customer_advance_account = frappe.db.get_value("Company", frappe.defaults.get_user_default("Company"), "default_receivable_account")
-        customer_advance_account = "Debtors - OP"
-        journal_entry = frappe.get_doc({
+            frappe.logger().info(f"[JE DEBUG] Processing Payment Mode: {mode} | Amount: {amount}")
+            # frappe.msgprint(f"[DEBUG] Processing Payment Mode: {mode} | Amount: {amount}")
+
+            if amount <= 0:
+                frappe.logger().warning(f"[JE DEBUG] Skipping mode {mode} as amount is 0")
+                continue
+
+            if mode == "cash":
+                account = cash_account
+            elif mode in ["upi", "card", "bank","neft"]:
+                account = bank_account
+            elif mode == "credit":
+                account = debit_account
+            else:
+                account = bank_account
+
+            debit_entry = {
+                "account": account,
+                "debit_in_account_currency": amount,
+                "credit_in_account_currency": 0
+            }
+            je_entries.append(debit_entry)
+            frappe.logger().info(f"[JE DEBUG] Added Debit Entry: {debit_entry}")
+            # frappe.msgprint(f"[DEBUG] Debit Entry: {debit_entry}")
+
+        frappe.logger().info(f"[JE DEBUG] Final JE Entries: {je_entries}")
+        # frappe.msgprint(f"[DEBUG] Final JE Entries: {je_entries}")
+
+        #Create the Journal Entry
+        je_doc = frappe.get_doc({
             "doctype": "Journal Entry",
             "posting_date": formatted_date,
+            "accounts": je_entries,
             "naming_series": "KX-JV-.YYYY.-",
-            "custom_bill_number": reference_no,
-            "bill_date":formatted_date,
-            "remark": f"Advance refund to {customer_name}",
-            "custom_advance_type": custom_advance_type,
-            "custom_patient_type": custom_patient_type,
-            "custom_uhid": custom_uh_id,
-            "custom_bill_category": "UHID Advance Refund",
-            "accounts": [
-                {
-                    "account": paid_to_account,
-                    "credit_in_account_currency": amount,
-                    "account_currency": paid_to_account_currency
-                },
-                {
-                    "account": customer_advance_account,
-                    "debit_in_account_currency": amount,
-                    "account_currency": paid_to_account_currency,
-                    "party_type": "Customer",
-                    "party": customer,
-                    # "is_advance":"Yes"
-                }
-            ]
+            "user_remark": f"Due Settlement for Bill No: {bill_no}",
+            "custom_bill_category": "DUE SETTLEMENT",
+            "custom_bill_number": bill_no,
+            "custom_uhid": uhid,
+            "custom_payer_name": customer,
+            "custom_receipt_no": receipt_no,
+            "custom_admission_id": admission_id
         })
-        if transaction_id:
-            journal_entry.cheque_no = transaction_id
-            journal_entry.cheque_date = formatted_date
-        journal_entry.insert()
+        je_doc.insert(ignore_permissions=True)
         frappe.db.commit()
-        journal_entry.submit()
+        je_doc.submit()
+        frappe.logger().info(f"[JE DEBUG] Journal Entry {je_doc.name} created successfully.")
+        # frappe.msgprint(f"[DEBUG] Journal Entry {je_doc.name} created successfully.")
 
-        return f"Journal Entry {journal_entry.name} created successfully!"
-    
+        return je_doc.name
+
     except Exception as e:
         frappe.log_error(f"Error creating Journal Entry: {str(e)}")
+        frappe.logger().error(f"[JE DEBUG] Exception: {str(e)}")
+        # frappe.msgprint(f"[DEBUG] Error: {str(e)}")
         return f"Failed to create Journal Entry: {str(e)}"
-
 
 def get_or_create_customer(customer_name, payer_type=None):
     # If payer type is cash, don't create a customer
@@ -255,6 +263,8 @@ def get_or_create_customer(customer_name, payer_type=None):
         payer_type = payer_type.lower()
         if payer_type == "tpa":
             customer_group = "TPA"
+        elif payer_type == "cash":
+            customer_group = "Cash"
         elif payer_type == "credit":
             customer_group = "Credit"
         else:

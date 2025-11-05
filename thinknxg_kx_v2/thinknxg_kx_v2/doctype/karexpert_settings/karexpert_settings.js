@@ -23,11 +23,11 @@ frappe.ui.form.on("Karexpert  Table", {
 				message: "IP Sales Invoice Created"
 			},
 			"DUE SETTLEMENT": {
-				method:"thinknxg_kx.thinknxg_kx.custom_script.due_settlement.main",
+				method:"thinknxg_kx_v2.thinknxg_kx_v2.custom_script.due_settlement.main",
 				message: "Due settlement Created"
 			},
 			"ADVANCE DEPOSIT": {
-				method: "thinknxg_kx.thinknxg_kx.custom_script.advance_deposit.main",
+				method: "thinknxg_kx_v2.thinknxg_kx_v2.custom_script.advance_deposit.main",
 				message: "Advance Deposit Created"
 			},
 			"ADVANCE DEPOSIT REFUND": {
@@ -132,11 +132,11 @@ frappe.ui.form.on("Karexpert Settings", {
 							message: "IP Sales Invoice Created"
 						},
 						"DUE SETTLEMENT": {
-							method:"thinknxg_kx.thinknxg_kx.custom_script.due_settlement.main",
+							method:"thinknxg_kx_v2.thinknxg_kx_v2.custom_script.due_settlement.main",
 							message: "Due settlement Created"
 						},
 						"ADVANCE DEPOSIT": {
-							method: "thinknxg_kx.thinknxg_kx.custom_script.advance_deposit.main",
+							method: "thinknxg_kx_v2.thinknxg_kx_v2.custom_script.advance_deposit.main",
 							message: "Advance Deposit Created"
 						},
 						"ADVANCE DEPOSIT REFUND": {

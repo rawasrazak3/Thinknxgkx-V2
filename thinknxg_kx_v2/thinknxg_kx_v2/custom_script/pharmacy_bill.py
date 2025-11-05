@@ -74,6 +74,9 @@ def fetch_op_billing(jwt_token, from_date, to_date, headers):
 #     frappe.db.commit()
 #     return customer.name
 def get_or_create_customer(customer_name, payer_type=None):
+    # If payer type is cash, don't create a customer
+    if payer_type and payer_type.lower() == "cash":
+        return None
     # Check if the customer already exists
     existing_customer = frappe.db.exists("Customer", {"customer_name": customer_name , "customer_group":payer_type})
     if existing_customer:
@@ -84,8 +87,6 @@ def get_or_create_customer(customer_name, payer_type=None):
         payer_type = payer_type.lower()
         if payer_type == "tpa":
             customer_group = "TPA"
-        elif payer_type == "cash":
-            customer_group = "Cash"
         elif payer_type == "credit":
             customer_group = "Credit"
         else:
@@ -294,9 +295,9 @@ def main():
 
         # Prepare date range
         to_date_raw = settings.get("date")
-        t_date = getdate(to_date_raw) if to_date_raw else add_days(nowdate(), -4)
+        t_date = getdate(to_date_raw) if to_date_raw else getdate(add_days(nowdate(), -4))
         no_of_days = cint(settings.get("no_of_days") or 25)
-        f_date = add_days(t_date, -no_of_days)
+        f_date = getdate(add_days(t_date, -no_of_days))
 
         # Convert to timestamps (GMT+4)
         gmt_plus_4 = timezone(timedelta(hours=4))
@@ -369,7 +370,6 @@ if __name__ == "__main__":
     main()
 
 def create_journal_entry_from_billing(billing_data):
-    print("----creating journal----")
     bill_no = billing_data["bill_no"]
     payment_details = billing_data.get("payment_transaction_details", [])
     date = billing_data["g_creation_time"]
@@ -420,6 +420,7 @@ def create_journal_entry_from_billing(billing_data):
     cash_account = get_or_create_cash_account(store_name)
     bank_account = company_doc.default_bank_account
     stock_acc = get_or_create_stock_account(store_name)
+    write_off_account = company_doc.write_off_account
 
     # vat_account = getattr(company_doc, "default_tax_account", None) or frappe.db.get_single_value("Company", "default_tax_account")
     vat_account = "VAT 5% - OP"
@@ -560,6 +561,38 @@ def create_journal_entry_from_billing(billing_data):
 
     try:
         je.insert(ignore_permissions=True)
+        # calculate difference
+        total_debit = sum([acc.debit_in_account_currency or 0 for acc in je.accounts])
+        total_credit = sum([acc.credit_in_account_currency or 0 for acc in je.accounts])
+        difference = total_debit - total_credit
+
+        frappe.log(f"Raw difference: {difference:.4f}")  # log with 4 decimals
+
+        # add write-off if difference is small
+        if abs(difference) <= 0.5 and difference != 0:
+            if difference > 0:
+                je.append("accounts", {
+                    "account": write_off_account,
+                    "credit_in_account_currency": round(abs(difference),4),
+                    "debit_in_account_currency": 0,
+                    "account_currency": je.accounts[0].account_currency,
+                    "cost_center": cost_center
+                })
+            else:
+                je.append("accounts", {
+                    "account": write_off_account,
+                    "debit_in_account_currency": round(abs(difference),4),
+                    "credit_in_account_currency": 0,
+                    "account_currency": je.accounts[0].account_currency,
+                    "cost_center": cost_center
+                })
+
+        # refresh totals
+        je.set_missing_values()
+        # optional: round totals to 2 decimals to satisfy ERPNext
+        # je.total_debit = round(je.total_debit,2)
+        # je.total_credit = round(je.total_credit,2)
+        frappe.log(f"Adjusted difference after write-off: {(je.total_debit - je.total_credit):.4f}")
         je.submit()
         frappe.db.commit()
         frappe.log(f"Journal Entry created successfully with bill_no: {bill_no}")

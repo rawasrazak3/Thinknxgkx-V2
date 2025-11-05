@@ -95,7 +95,7 @@
   "name": "Journal Entry-custom_bill_category",
   "no_copy": 0,
   "non_negative": 0,
-  "options": "\nOP Billing\nIP Billing\nPHARMACY\nPHARMACY REFUND\nOP Refund\nUHID Advance\nUHID Advance Refund\nAR BILL SETTLEMENT\nGRN\nGRN Return\nDOCTOR PAYOUT\nSTOCK TRANSFER\nSTOCK RETURN",
+  "options": "\nOP Billing\nIP Billing\nPHARMACY\nPHARMACY REFUND\nOP Refund\nUHID Advance\nUHID Advance Refund\nAR BILL SETTLEMENT\nGRN\nGRN Return\nDOCTOR PAYOUT\nSTOCK TRANSFER\nSTOCK RETURN\nDUE SETTLEMENT",
   "permlevel": 0,
   "placeholder": null,
   "precision": "",

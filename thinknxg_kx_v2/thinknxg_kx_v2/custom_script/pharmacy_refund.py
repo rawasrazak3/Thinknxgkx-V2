@@ -40,6 +40,9 @@ def fetch_op_billing_refund(jwt_token, from_date, to_date, headers):
         frappe.throw(f"Failed to fetch OP Pharmacy Billing data: {response.status_code} - {response.text}")
 
 def get_or_create_customer(customer_name, payer_type=None):
+    # If payer type is cash, don't create a customer
+    if payer_type and payer_type.lower() == "cash":
+        return None
     # Check if the customer already exists
     existing_customer = frappe.db.exists("Customer", {"customer_name": customer_name , "customer_group":payer_type})
     if existing_customer:
@@ -50,8 +53,6 @@ def get_or_create_customer(customer_name, payer_type=None):
         payer_type = payer_type.lower()
         if payer_type == "tpa":
             customer_group = "TPA"
-        elif payer_type == "cash":
-            customer_group = "Cash"
         elif payer_type == "credit":
             customer_group = "Credit"
         else:
@@ -212,9 +213,9 @@ def main():
 
         # Prepare date range
         to_date_raw = settings.get("date")
-        t_date = getdate(to_date_raw) if to_date_raw else add_days(nowdate(), -4)
+        t_date = getdate(to_date_raw) if to_date_raw else getdate(add_days(nowdate(), -4))
         no_of_days = cint(settings.get("no_of_days") or 25)
-        f_date = add_days(t_date, -no_of_days)
+        f_date = getdate(add_days(t_date, -no_of_days))
 
         # Convert to timestamps (GMT+4)
         gmt_plus_4 = timezone(timedelta(hours=4))

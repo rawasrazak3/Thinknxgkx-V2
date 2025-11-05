@@ -11,7 +11,6 @@ billing_type = "AR BILL SETTLEMENT"
 settings = frappe.get_single("Karexpert Settings")
 TOKEN_URL = settings.get("token_url")
 BILLING_URL = settings.get("billing_url")
-facility_id = settings.get("facility_id")
 
 # Fetch row details based on billing type
 billing_row = frappe.get_value("Karexpert  Table", {"billing_type": billing_type},
@@ -20,61 +19,99 @@ billing_row = frappe.get_value("Karexpert  Table", {"billing_type": billing_type
 headers_token = fetch_api_details(billing_type)
 
 
-def get_jwt_token():
-    response = requests.post(TOKEN_URL, headers=headers_token)
-    if response.status_code == 200:
-        return response.json().get("jwttoken")
-    else:
-        frappe.throw(f"Failed to fetch JWT token: {response.status_code} - {response.text}")
-
-def fetch_advance_billing(jwt_token, from_date, to_date):
-    headers_billing = {
-        "Content-Type": "application/json",
-        "clientCode": "METRO_THINKNXG_FI",
-        "integrationKey": "AR_BILL_SETTLEMENT",
-        "Authorization": f"Bearer {jwt_token}"
-    }
+def fetch_advance_billing(jwt_token, from_date, to_date, headers):
     payload = {"requestJson": {"FROM": from_date, "TO": to_date}}
+    headers_billing = headers.copy()
+    headers_billing["Authorization"] = f"Bearer {jwt_token}"
+
     response = requests.post(BILLING_URL, headers=headers_billing, json=payload)
     if response.status_code == 200:
         return response.json()
     else:
-        frappe.throw(f"Failed to ar settlement data: {response.status_code} - {response.text}")
+        frappe.throw(f"Failed to fetch OP Pharmacy Billing data: {response.status_code} - {response.text}")
+
+
 @frappe.whitelist()
 def main():
     try:
-        jwt_token = get_jwt_token()
-        frappe.log("JWT Token fetched successfully.")
-
-        # from_date = 1672531200000  
-        # to_date = 1966962420000    
-        # Fetch dynamic date and number of days from settings
         settings = frappe.get_single("Karexpert Settings")
-        # Get to_date from settings or fallback to nowdate() - 4 days
+
+        # Collect all facility IDs from child table
+        facility_list = [row.facility_id for row in settings.get("facility_id_details") or [] if row.facility_id]
+
+        if not facility_list:
+            frappe.throw("No facility IDs found in Karexpert Settings.")
+
+        # Prepare date range
         to_date_raw = settings.get("date")
-        if to_date_raw:
-            t_date = getdate(to_date_raw)
-        else:
-            t_date = add_days(nowdate(), -4)
+        t_date = getdate(to_date_raw) if to_date_raw else getdate(add_days(nowdate(), -4))
+        no_of_days = cint(settings.get("no_of_days") or 25)
+        f_date = getdate(add_days(t_date, -no_of_days))
 
-        # Get no_of_days from settings and calculate from_date
-        no_of_days = cint(settings.get("no_of_days") or 25)  # default 3 days if not set
-        f_date = add_days(t_date, -no_of_days)
-         # Define GMT+4 timezone
+        # Convert to timestamps (GMT+4)
         gmt_plus_4 = timezone(timedelta(hours=4))
-
-        # Convert to timestamps in milliseconds for GMT+4
         from_date = int(datetime.combine(f_date, time.min, tzinfo=gmt_plus_4).timestamp() * 1000)
         to_date = int(datetime.combine(t_date, time.max, tzinfo=gmt_plus_4).timestamp() * 1000)
 
-        billing_data = fetch_advance_billing(jwt_token, from_date, to_date)
-        frappe.log("Due settlement data fetched successfully.")
+        all_billing_data = []
 
-        for billing in billing_data.get("jsonResponse", []):
+        # Loop through each facility
+        for row in settings.get("facility_id_details") or []:
+            facility_id = row.facility_id
+            if not facility_id:
+                continue
+
+            # Prepare headers for this facility
+            billing_row = frappe.get_value(
+                "Karexpert  Table",
+                {"billing_type": "AR BILL SETTLEMENT"},
+                ["client_code", "integration_key", "x_api_key"],
+                as_dict=True
+            )
+
+            headers = {
+                "Content-Type": "application/json",
+                "clientCode": billing_row["client_code"],
+                "integrationKey": billing_row["integration_key"],
+                "facilityId": facility_id,
+                "messageType": "request",
+                "x-api-key": billing_row["x_api_key"]
+            }
+
+            # Fetch JWT for this facility
+            jwt_token = get_jwt_token_for_headers(headers)
+
+            frappe.log(f"Fetching AR bill settlement for Facility ID: {facility_id}")
+            print("Fetching aAR bill settlement for Facility ID",facility_id)
+            billing_data = fetch_advance_billing(jwt_token, from_date, to_date, headers)
+
+            if billing_data and "jsonResponse" in billing_data:
+                all_billing_data.extend(billing_data["jsonResponse"])
+            else:
+                frappe.log(f"No data returned for {facility_id}")
+
+        # ✅ Process all collected billing data
+        for billing in all_billing_data:
             create_journal_entry(billing)
 
+        frappe.log("All facility AR bill settlement data processed successfully.")
+
     except Exception as e:
-        frappe.log_error(f"Error: {e}")
+        frappe.log_error(f"Error in AR bill settlement Fetch: {e}")
+
+
+def get_jwt_token_for_headers(headers):
+    """
+    Fetch JWT token using the provided headers dict.
+    """
+    try:
+        response = requests.post(TOKEN_URL, headers=headers, timeout=10)
+        if response.status_code == 200:
+            return response.json().get("jwttoken")
+        else:
+            frappe.throw(f"Failed to fetch JWT token: {response.status_code} - {response.text}")
+    except requests.exceptions.RequestException as e:
+        frappe.throw(f"JWT request failed: {e}")
 
 if __name__ == "__main__":
     main()
@@ -202,6 +239,7 @@ def create_journal_entry(billing_data):
         je_doc = frappe.get_doc({
             "doctype": "Journal Entry",
             "posting_date": formatted_date,
+            "naming_series": "KX-JV-.YYYY.-",
             "accounts": je_entries,
             "user_remark": f"AR Settlement for Bill No: {bill_no}",
             "custom_bill_category": "AR BILL SETTLEMENT",
@@ -226,6 +264,9 @@ def create_journal_entry(billing_data):
         return f"Failed to create Journal Entry: {str(e)}"
 
 def get_or_create_customer(customer_name, payer_type=None):
+    # If payer type is cash, don't create a customer
+    if payer_type and payer_type.lower() == "cash":
+        return None
     # Check if the customer already exists
     existing_customer = frappe.db.exists("Customer", {"customer_name": customer_name , "customer_group":payer_type})
     if existing_customer:
@@ -236,8 +277,6 @@ def get_or_create_customer(customer_name, payer_type=None):
         payer_type = payer_type.lower()
         if payer_type == "tpa":
             customer_group = "TPA"
-        elif payer_type == "cash":
-            customer_group = "Cash"
         elif payer_type == "credit":
             customer_group = "Credit"
         else:

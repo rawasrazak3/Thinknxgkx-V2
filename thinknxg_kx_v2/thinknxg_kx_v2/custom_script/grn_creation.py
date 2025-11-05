@@ -446,6 +446,7 @@ def create_journal_entry(billing_data):
         total_net_amount = float(billing_data.get("totalNetAmount") or 0)
         total_tax = float(billing_data.get("total_tax") or 0)
         bill_amount = float(billing_data.get("billAmount") or 0)
+        discount = float(billing_data.get("totalDiscount") or 0)
 
         cost_center = get_or_create_cost_center(store_name)
         stock_acc = get_or_create_stock_account(store_name)
@@ -464,6 +465,7 @@ def create_journal_entry(billing_data):
             "company": company,
             "custom_bill_number": bill_no,
             "custom_grn_number": grn_number,
+            "custom_discount":discount,
             "custom_store": store_name,
             "custom_supplier_name": frappe.get_value("Supplier", supplier, "supplier_name"),
             "user_remark": f"Auto-created from GRN {grn_number}",
@@ -473,7 +475,7 @@ def create_journal_entry(billing_data):
                     "party_type": "Supplier",
                     "party": supplier,
                     "debit_in_account_currency": 0,
-                    "credit_in_account_currency": bill_amount
+                    "credit_in_account_currency": total_net_amount
                 },
                 {
                     "account": stock_acc,
@@ -485,7 +487,7 @@ def create_journal_entry(billing_data):
         })
 
         if total_tax:
-            journal_entry.append({
+            journal_entry.append("accounts",{
                 "account": vat_account,
                 "debit_in_account_currency": total_tax,
                 "credit_in_account_currency": 0
@@ -510,9 +512,9 @@ def main():
             frappe.throw("No facility IDs found in Karexpert Settings.")
 
         to_date_raw = settings.get("date")
-        t_date = getdate(to_date_raw) if to_date_raw else add_days(nowdate(), -4)
+        t_date = getdate(to_date_raw) if to_date_raw else getdate(add_days(nowdate(), -4))
         no_of_days = cint(settings.get("no_of_days") or 25)
-        f_date = add_days(t_date, -no_of_days)
+        f_date = getdate(add_days(t_date, -no_of_days))
 
         gmt_plus_4 = timezone(timedelta(hours=4))
         from_date = int(datetime.combine(f_date, time.min, tzinfo=gmt_plus_4).timestamp() * 1000)
