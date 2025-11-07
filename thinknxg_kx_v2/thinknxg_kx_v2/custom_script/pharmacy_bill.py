@@ -420,7 +420,7 @@ def create_journal_entry_from_billing(billing_data):
     cash_account = get_or_create_cash_account(store_name)
     bank_account = company_doc.default_bank_account
     stock_acc = get_or_create_stock_account(store_name)
-    write_off_account = company_doc.write_off_account
+    write_off_account = "Diff Income - OP"
 
     # vat_account = getattr(company_doc, "default_tax_account", None) or frappe.db.get_single_value("Company", "default_tax_account")
     vat_account = "VAT 5% - OP"
