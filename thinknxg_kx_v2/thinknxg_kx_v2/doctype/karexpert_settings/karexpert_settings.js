@@ -110,7 +110,7 @@ frappe.ui.form.on("Karexpert  Table", {
 frappe.ui.form.on("Karexpert Settings", {
     refresh: function(frm) {
         frm.add_custom_button("Execute Selected", function() {
-            let selected_rows = (frm.doc.table_aozt || []).filter(r => r.is_selected);
+            let selected_rows = (frm.doc.table_aozt || []).filter(r => r.select);
 
             if (!selected_rows.length) {
                 frappe.msgprint("Please select at least one row to execute.");
