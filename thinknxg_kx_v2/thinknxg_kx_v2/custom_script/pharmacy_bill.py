@@ -295,7 +295,7 @@ def main():
 
         # Prepare date range
         to_date_raw = settings.get("date")
-        t_date = getdate(to_date_raw) if to_date_raw else getdate(add_days(nowdate(), -4))
+        t_date = getdate(to_date_raw) if to_date_raw else getdate(add_days(nowdate(), 0))
         no_of_days = cint(settings.get("no_of_days") or 25)
         f_date = getdate(add_days(t_date, -no_of_days))
 
@@ -380,6 +380,50 @@ def create_journal_entry_from_billing(billing_data):
     dt = datetime.fromtimestamp(datetimes, gmt_plus_4)
     formatted_date = dt.strftime('%Y-%m-%d')
     posting_time = dt.strftime('%H:%M:%S')
+
+    # modification_time = billing_data.get("g_modify_time", date)  # fallback if not present
+    # mod_date = modification_time / 1000.0
+
+    # # Define GMT+4
+    # gmt_plus_4 = timezone(timedelta(hours=4))
+    # mod_dt = datetime.fromtimestamp(mod_date, gmt_plus_4)
+    # mod_time = mod_dt.strftime('%Y-%m-%d %H:%M:%S')
+
+
+    # existing_jv = frappe.db.get_value(
+    #     "Journal Entry",
+    #     {"custom_bill_number": bill_no, "docstatus": ["!=", 2]},
+    #     ["name", "custom_modification_time"],
+    #     as_dict=True
+    # )
+
+    # if existing_si:
+    #     stored_mod_time = existing_si.get("custom_modification_time")
+    #     if stored_mod_time and str(stored_mod_time) == str(mod_time):
+    #         frappe.log(f"Sales Invoice {bill_no} already up-to-date. Skipping...")
+    #         return existing_si["name"]
+
+    #     # Cancel old invoice + related journals
+    #     si_doc = frappe.get_doc("Sales Invoice", existing_si["name"])
+    #     try:
+    #         # Cancel linked journals
+    #         journals = frappe.get_all("Journal Entry",
+    #             filters={"custom_bill_number": bill_no, "docstatus": 1},
+    #             pluck="name")
+    #         for jn in journals:
+    #             je_doc = frappe.get_doc("Journal Entry", jn)
+    #             je_doc.cancel()
+    #             frappe.db.commit()
+    #             frappe.log(f"Cancelled JE {jn} for bill {bill_no}")
+
+    #         # Cancel invoice
+    #         si_doc.reload()
+    #         si_doc.cancel()
+    #         frappe.db.commit()
+    #         frappe.log(f"Cancelled SI {existing_si['name']} for modified bill {bill_no}")
+    #     except Exception as e:
+    #         frappe.log_error(f"Error cancelling SI/JE for bill {bill_no}: {e}")
+    #         return None
 
     if frappe.db.exists("Journal Entry", {"custom_bill_number": bill_no, "docstatus": ["!=", 2]}):
         frappe.log(f"Journal Entry with bill_no {bill_no} already exists.")
