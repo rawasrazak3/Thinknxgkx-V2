@@ -298,6 +298,49 @@ def create_journal_entry_from_pharmacy_refund(refund_data):
     dt = datetime.fromtimestamp(datetimes, gmt_plus_4)
     formatted_date = dt.strftime('%Y-%m-%d')
     posting_time = dt.strftime('%H:%M:%S')
+    modification_time = refund_data.get("g_modify_time", date)  # fallback if not present
+    mod_date = modification_time / 1000.0
+
+    # Define GMT+4
+    gmt_plus_4 = timezone(timedelta(hours=4))
+    mod_dt = datetime.fromtimestamp(mod_date, gmt_plus_4)
+    mod_time = mod_dt.strftime('%Y-%m-%d %H:%M:%S')
+
+
+    existing_jv = frappe.db.get_value(
+        "Journal Entry",
+        {"custom_bill_number": bill_no, "docstatus": ["!=", 2]},
+        ["name", "custom_modification_time"],
+        as_dict=True
+    )
+
+    if existing_jv:
+        stored_mod_time = existing_jv.get("custom_modification_time")
+        if stored_mod_time and str(stored_mod_time) == str(mod_time):
+            frappe.log(f"Journal Entry {bill_no} already up-to-date. Skipping...")
+            return existing_jv["name"]
+
+        # Cancel old invoice + related journals
+        je_doc = frappe.get_doc("Journal Entry", existing_jv["name"])
+        try:
+            # # Cancel linked journals
+            # journals = frappe.get_all("Journal Entry",
+            #     filters={"custom_bill_number": bill_no, "docstatus": 1},
+            #     pluck="name")
+            # for jn in journals:
+            #     je_doc = frappe.get_doc("Journal Entry", jn)
+            #     je_doc.cancel()
+            #     frappe.db.commit()
+            #     frappe.log(f"Cancelled JE {jn} for bill {bill_no}")
+
+            # Cancel invoice
+            je_doc.reload()
+            je_doc.cancel()
+            frappe.db.commit()
+            frappe.log(f"Cancelled JV {existing_jv['name']} for modified bill {bill_no}")
+        except Exception as e:
+            frappe.log_error(f"Error cancelling JE for bill {bill_no}: {e}")
+            return None
 
     if frappe.db.exists("Journal Entry", {"custom_bill_number": bill_no, "docstatus": ["!=", 2] ,"custom_bill_category": "PHARMACY REFUND"}):
         frappe.log(f"Refund Journal Entry with bill_no {bill_no} already exists.")
@@ -428,6 +471,7 @@ def create_journal_entry_from_pharmacy_refund(refund_data):
         "voucher_type": "Journal Entry",
         "posting_date": formatted_date,
         "posting_time": posting_time,
+        "custom_modification_time": mod_time,  # store mod time
         "custom_patient_name": patient_name,
         "custom_bill_number": bill_no,
         "custom_bill_category": "PHARMACY REFUND",
