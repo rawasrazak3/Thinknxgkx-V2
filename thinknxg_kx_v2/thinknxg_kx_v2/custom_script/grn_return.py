@@ -404,28 +404,30 @@ def create_journal_entry_for_return(grouped_return):
     posting_date = dt.strftime('%Y-%m-%d')
     posting_time = dt.strftime('%H:%M:%S')
 
-    total_amount = grouped_return["total_net_purchase_value"] + grouped_return["total_tax"]
+    total_amount = grouped_return["total_net_purchase_value"]
+    tax_amount = grouped_return["total_tax"]
     if total_amount <= 0:
         frappe.log(f"Total amount for drReturnNo {dr_return_no} is zero or negative, skipping.")
         return
     
     cost_center = get_or_create_cost_center(store_name)
     company = frappe.defaults.get_user_default("Company") or "Your Company"
+    vat_account = "VAT 5% - OP"
     stock_account = get_or_create_stock_account(store_name)
     creditor_account = frappe.db.get_value("Account", {"account_name": "Creditors", "company": company})
     if not stock_account or not creditor_account:
         frappe.log_error("Stock or Creditors account not found for company: " + company)
         return
 
-    original_invoice = frappe.get_all(
+    original_jv = frappe.get_all(
         "Journal Entry",
         filters={"custom_grn_number": dr_no, "docstatus": 1},
         fields=["name"],
         limit=1
     )
-    reference_invoice = original_invoice[0]["name"] if original_invoice else None
+    reference_invoice = original_jv[0]["name"] if original_jv else None
     if not reference_invoice:
-        frappe.log(f"No original Purchase Invoice found with GRN No: {dr_no}")
+        frappe.log(f"No original Journal found with GRN No: {dr_no}")
 
     je = frappe.get_doc({
         "doctype": "Journal Entry",
@@ -444,7 +446,9 @@ def create_journal_entry_for_return(grouped_return):
                 "account": creditor_account,
                 "party_type": "Supplier",
                 "party": supplier_name,
-                "debit_in_account_currency": total_amount
+                "debit_in_account_currency": total_amount,
+                "reference_type": "Journal Entry",
+                "reference_name": reference_invoice,
             },
             {
                 "account": stock_account,
@@ -453,7 +457,12 @@ def create_journal_entry_for_return(grouped_return):
             }
         ]
     })
-
+    if tax_amount:
+        je.append("accounts",{
+            "account": vat_account,
+            "debit_in_account_currency": tax_amount,
+            "credit_in_account_currency": 0
+        })
     try:
         je.insert(ignore_permissions=True)
         je.submit()

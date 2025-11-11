@@ -607,8 +607,10 @@ def create_journal_entry_from_billing(billing_data):
     try:
         je.insert(ignore_permissions=True)
         # calculate difference
-        total_debit = sum([acc.debit_in_account_currency or 0 for acc in je.accounts])
-        total_credit = sum([acc.credit_in_account_currency or 0 for acc in je.accounts])
+        # total_debit = sum([acc.debit_in_account_currency or 0 for acc in je.accounts])
+        # total_credit = sum([acc.credit_in_account_currency or 0 for acc in je.accounts])
+        total_debit = je.total_debit or 0 
+        total_credit = je.total_credit or 0 
         difference = total_debit - total_credit
 
         frappe.log(f"Raw difference: {difference:.4f}")  # log with 4 decimals

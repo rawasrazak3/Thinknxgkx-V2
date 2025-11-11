@@ -309,7 +309,7 @@ def create_journal_entry_from_pharmacy_refund(refund_data):
 
     existing_jv = frappe.db.get_value(
         "Journal Entry",
-        {"custom_bill_number": bill_no, "docstatus": ["!=", 2]},
+        {"custom_bill_number": bill_no, "docstatus": ["!=", 2] ,"custom_bill_category": "PHARMACY REFUND"},
         ["name", "custom_modification_time"],
         as_dict=True
     )
@@ -379,7 +379,15 @@ def create_journal_entry_from_pharmacy_refund(refund_data):
     stock_acc = get_or_create_stock_account(store_name)
     vat_account = "VAT 5% - OP"
     default_expense_account = company_doc.default_expense_account
-
+    original_jv = frappe.get_all(
+        "Journal Entry",
+        filters={"custom_bill_number": bill_no, "docstatus": 1,"custom_bill_category": "PHARMACY"},
+        fields=["name"],
+        limit=1
+    )
+    reference_invoice = original_jv[0]["name"] if original_jv else None
+    if not reference_invoice:
+        frappe.log(f"No original pharmacy Journal found with bill No: {bill_no}")
     total_uepr = sum(
         (item.get("ueprValue") or 0)
         for item in refund_data.get("item_details", [])
@@ -396,6 +404,8 @@ def create_journal_entry_from_pharmacy_refund(refund_data):
             "account": credit_account,  # Credit receivable/customer
             "debit_in_account_currency": item_rate,
             "credit_in_account_currency": 0,
+            "reference_type": "Journal Entry",
+            "reference_name": reference_invoice,
             # "party_type": "Customer",
             # "party": customer
         },
