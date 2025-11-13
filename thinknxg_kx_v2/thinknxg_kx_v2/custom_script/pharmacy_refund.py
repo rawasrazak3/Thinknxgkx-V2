@@ -37,7 +37,7 @@ def fetch_op_billing_refund(jwt_token, from_date, to_date, headers):
     if response.status_code == 200:
         return response.json()
     else:
-        frappe.throw(f"Failed to fetch OP Pharmacy Billing data: {response.status_code} - {response.text}")
+        frappe.throw(f"Failed to fetch Pharmacy Billing refund data: {response.status_code} - {response.text}")
 
 def get_or_create_customer(customer_name, payer_type=None):
     # If payer type is cash, don't create a customer
@@ -233,7 +233,7 @@ def main():
             # Prepare headers for this facility
             billing_row = frappe.get_value(
                 "Karexpert  Table",
-                {"billing_type": "OP PHARMACY BILLING"},
+                {"billing_type": "PHARMACY BILLING REFUND"},
                 ["client_code", "integration_key", "x_api_key"],
                 as_dict=True
             )
@@ -309,7 +309,7 @@ def create_journal_entry_from_pharmacy_refund(refund_data):
 
     existing_jv = frappe.db.get_value(
         "Journal Entry",
-        {"custom_bill_number": bill_no, "docstatus": ["!=", 2] ,"custom_bill_category": "PHARMACY REFUND"},
+        {"custom_receipt_no": receipt_no, "docstatus": ["!=", 2] ,"custom_bill_category": "PHARMACY REFUND"},
         ["name", "custom_modification_time"],
         as_dict=True
     )
@@ -342,13 +342,13 @@ def create_journal_entry_from_pharmacy_refund(refund_data):
             frappe.log_error(f"Error cancelling JE for bill {bill_no}: {e}")
             return None
 
-    if frappe.db.exists("Journal Entry", {"custom_bill_number": bill_no, "docstatus": ["!=", 2] ,"custom_bill_category": "PHARMACY REFUND"}):
+    if frappe.db.exists("Journal Entry", {"custom_receipt_no": receipt_no, "docstatus": ["!=", 2] ,"custom_bill_category": "PHARMACY REFUND"}):
         frappe.log(f"Refund Journal Entry with bill_no {bill_no} already exists.")
         return
 
     # Patient & Customer
     customer_name = refund_data["payer_name"]
-    payer_type = refund_data["payer_type"]
+    payer_type = refund_data["payer_type"].lower()
     patient_name = refund_data["patient_name"]
     gender = refund_data["patient_gender"]
 
@@ -357,14 +357,14 @@ def create_journal_entry_from_pharmacy_refund(refund_data):
 
     treating_department_name = refund_data.get("treating_department_name", "Default Dept")
     facility_name = refund_data.get("facility_name", "Default Dept")
-    store_name = refund_data.get("StoreName")
+    store_name = refund_data.get("StoreName") or facility_name
     cost_center = get_or_create_cost_center(store_name)
     # cost_center = get_or_create_cost_center(treating_department_name)
 
     # Amounts (Refund)
-    item_rate = refund_data["patient_refund_amount"]
+    item_rate = refund_data["taxable_amount"]
     tax_amount = refund_data.get("tax", 0)
-    authorized_amount = refund_data.get("authorized_amount", 0)
+    authorized_amount = refund_data.get("payer_refund_amount", 0)
     discount_amount = refund_data.get("discount", 0)
     round_off = refund_data.get("roundOff", 0)
 
@@ -418,7 +418,15 @@ def create_journal_entry_from_pharmacy_refund(refund_data):
             "debit_in_account_currency": tax_amount,
             "credit_in_account_currency": 0,
         })
-
+    if payer_type == "credit" and authorized_amount > 0:
+        je_accounts.append({
+                "account": debit_account,
+                "debit_in_account_currency":0,
+                "credit_in_account_currency":authorized_amount,
+                "party_type": "Customer",
+                "party": customer,
+                "cost_center": cost_center
+            })
     # UEPR reversal
     if total_uepr > 0:
         je_accounts.extend([
@@ -459,7 +467,7 @@ def create_journal_entry_from_pharmacy_refund(refund_data):
                 "party": customer,
                 "cost_center": cost_center
             })
-        elif mode in ["upi", "card_payment", "bank"]:
+        elif mode in ["upi", "card_payment", "bank","credit_card"]:
             je_accounts.append({
                 "account": bank_account,
                 "debit_in_account_currency": 0,

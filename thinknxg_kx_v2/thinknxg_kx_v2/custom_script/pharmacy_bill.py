@@ -1,10 +1,11 @@
 import frappe
 import requests
 import json
+import time
 from frappe.utils import nowdate
 from datetime import datetime
 from frappe.utils import getdate, add_days, cint
-from datetime import datetime, timedelta, time, timezone
+from datetime import datetime, timedelta, time as dt_time, timezone
 from thinknxg_kx_v2.thinknxg_kx_v2.doctype.karexpert_settings.karexpert_settings import fetch_api_details
 billing_type = "OP PHARMACY BILLING"
 settings = frappe.get_single("Karexpert Settings")
@@ -301,8 +302,8 @@ def main():
 
         # Convert to timestamps (GMT+4)
         gmt_plus_4 = timezone(timedelta(hours=4))
-        from_date = int(datetime.combine(f_date, time.min, tzinfo=gmt_plus_4).timestamp() * 1000)
-        to_date = int(datetime.combine(t_date, time.max, tzinfo=gmt_plus_4).timestamp() * 1000)
+        from_date = int(datetime.combine(f_date, dt_time.min, tzinfo=gmt_plus_4).timestamp() * 1000)
+        to_date = int(datetime.combine(t_date, dt_time.max, tzinfo=gmt_plus_4).timestamp() * 1000)
 
         all_billing_data = []
 
@@ -341,11 +342,13 @@ def main():
             else:
                 frappe.log(f"No data returned for {facility_id}")
 
-        # ✅ Process all collected billing data
-        for billing in all_billing_data:
-            create_journal_entry_from_billing(billing["pharmacy_billing"])
-
-        frappe.log("All facility billing data processed successfully.")
+            # ✅ Process all collected billing data
+            for billing in all_billing_data:
+                create_journal_entry_from_billing(billing["pharmacy_billing"])
+                
+            # Wait 5 seconds before processing the next facility
+            time.sleep(5)
+            frappe.log("All facility billing data processed successfully.")
 
     except Exception as e:
         frappe.log_error(f"Error in Pharmacy Billing Fetch: {e}")
@@ -392,7 +395,7 @@ def create_journal_entry_from_billing(billing_data):
 
     existing_jv = frappe.db.get_value(
         "Journal Entry",
-        {"custom_bill_number": bill_no, "docstatus": ["!=", 2]},
+        {"custom_bill_number": bill_no, "docstatus": ["!=", 2],"custom_bill_category" :"PHARMACY"},
         ["name", "custom_modification_time"],
         as_dict=True
     )
@@ -609,18 +612,18 @@ def create_journal_entry_from_billing(billing_data):
         # calculate difference
         # total_debit = sum([acc.debit_in_account_currency or 0 for acc in je.accounts])
         # total_credit = sum([acc.credit_in_account_currency or 0 for acc in je.accounts])
-        total_debit = je.total_debit or 0 
-        total_credit = je.total_credit or 0 
-        difference = total_debit - total_credit
+        total_debit = round(je.total_debit,3) or 0 
+        total_credit = round(je.total_credit,3) or 0 
+        difference = round(total_debit - total_credit, 2)
 
         frappe.log(f"Raw difference: {difference:.4f}")  # log with 4 decimals
 
         # add write-off if difference is small
         if abs(difference) <= 0.5 and difference != 0:
-            if difference > 0:
+            if difference > 0 and total_debit > total_credit:
                 je.append("accounts", {
                     "account": write_off_account,
-                    "credit_in_account_currency": round(abs(difference),4),
+                    "credit_in_account_currency": difference,
                     "debit_in_account_currency": 0,
                     "account_currency": je.accounts[0].account_currency,
                     "cost_center": cost_center
@@ -628,7 +631,7 @@ def create_journal_entry_from_billing(billing_data):
             else:
                 je.append("accounts", {
                     "account": write_off_account,
-                    "debit_in_account_currency": round(abs(difference),4),
+                    "debit_in_account_currency": difference,
                     "credit_in_account_currency": 0,
                     "account_currency": je.accounts[0].account_currency,
                     "cost_center": cost_center
