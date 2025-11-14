@@ -357,7 +357,7 @@ def create_journal_entry_from_pharmacy_refund(refund_data):
 
     treating_department_name = refund_data.get("treating_department_name", "Default Dept")
     facility_name = refund_data.get("facility_name", "Default Dept")
-    store_name = refund_data.get("StoreName") or facility_name
+    store_name = refund_data.get("storeName")
     cost_center = get_or_create_cost_center(store_name)
     # cost_center = get_or_create_cost_center(treating_department_name)
 
