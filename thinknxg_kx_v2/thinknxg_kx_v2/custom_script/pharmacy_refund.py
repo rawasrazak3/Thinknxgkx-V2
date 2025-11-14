@@ -406,6 +406,7 @@ def create_journal_entry_from_pharmacy_refund(refund_data):
             "credit_in_account_currency": 0,
             "reference_type": "Journal Entry",
             "reference_name": reference_invoice,
+            "cost_center": cost_center
             # "party_type": "Customer",
             # "party": customer
         },
