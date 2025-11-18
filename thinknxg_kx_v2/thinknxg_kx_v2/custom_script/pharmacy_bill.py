@@ -7,6 +7,14 @@ from datetime import datetime
 from frappe.utils import getdate, add_days, cint
 from datetime import datetime, timedelta, time as dt_time, timezone
 from thinknxg_kx_v2.thinknxg_kx_v2.doctype.karexpert_settings.karexpert_settings import fetch_api_details
+
+@frappe.whitelist()
+def queue_job():
+    frappe.enqueue(
+        "thinknxg_kx_v2.thinknxg_kx_v2.custom_script.pharmacy_bill.main",
+        timeout=600  # 5 minutes, adjust as needed
+    )
+
 billing_type = "OP PHARMACY BILLING"
 settings = frappe.get_single("Karexpert Settings")
 TOKEN_URL = settings.get("token_url")
@@ -614,13 +622,13 @@ def create_journal_entry_from_billing(billing_data):
         # total_credit = sum([acc.credit_in_account_currency or 0 for acc in je.accounts])
         total_debit = round(je.total_debit,3) or 0 
         total_credit = round(je.total_credit,3) or 0 
-        difference = round(total_debit - total_credit, 2)
+        difference = je.difference
 
         frappe.log(f"Raw difference: {difference:.4f}")  # log with 4 decimals
 
         # add write-off if difference is small
         if abs(difference) <= 0.5 and difference != 0:
-            if difference > 0 and total_debit > total_credit:
+            if difference > 0:
                 je.append("accounts", {
                     "account": write_off_account,
                     "credit_in_account_currency": difference,

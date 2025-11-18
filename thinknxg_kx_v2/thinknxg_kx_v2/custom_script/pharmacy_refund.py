@@ -378,6 +378,7 @@ def create_journal_entry_from_pharmacy_refund(refund_data):
     bank_account = company_doc.default_bank_account
     stock_acc = get_or_create_stock_account(store_name)
     vat_account = "VAT 5% - OP"
+    write_off_account = "Diff Income - OP"
     default_expense_account = company_doc.default_expense_account
     original_jv = frappe.get_all(
         "Journal Entry",
@@ -510,6 +511,25 @@ def create_journal_entry_from_pharmacy_refund(refund_data):
 
     try:
         je.insert(ignore_permissions=True)
+        difference = je.difference
+        # add write-off if difference is small
+        if abs(difference) <= 0.5 and difference != 0:
+            if difference > 0 :
+                je.append("accounts", {
+                    "account": write_off_account,
+                    "credit_in_account_currency": difference,
+                    "debit_in_account_currency": 0,
+                    "account_currency": je.accounts[0].account_currency,
+                    "cost_center": cost_center
+                })
+            else:
+                je.append("accounts", {
+                    "account": write_off_account,
+                    "debit_in_account_currency": difference,
+                    "credit_in_account_currency": 0,
+                    "account_currency": je.accounts[0].account_currency,
+                    "cost_center": cost_center
+                })
         je.submit()
         frappe.db.commit()
         frappe.log(f"Refund Journal Entry created successfully with bill_no: {bill_no}")

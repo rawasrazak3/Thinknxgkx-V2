@@ -156,14 +156,16 @@ fixtures = [
 # ---------------
 scheduler_events = {
     "cron": {
-        "52 23 * * *": [  # Daily at 11:52
+        "40 23 * * *": [  # Daily at 11:52
             "thinknxg_kx_v2.thinknxg_kx_v2.custom_script.advance_deposit.main"
         ],
-        "54 23 * * *": [  # Daily at 11:54
+        "41 23 * * *": [  # Daily at 11:54
             "thinknxg_kx_v2.thinknxg_kx_v2.custom_script.supplier_creation.main",
         ],
+        "42 23 * * *": [  # Daily at 11:54
+            "thinknxg_kx_v2.thinknxg_kx_v2.custom_script.pharmacy_bill.queue_job",
+        ],
         "56 23 * * *": [  # Daily at 11:56
-            "thinknxg_kx_v2.thinknxg_kx_v2.custom_script.pharmacy_bill.main",
             "thinknxg_kx_v2.thinknxg_kx_v2.custom_script.pharmacy_refund.main",
             # "thinknxg_kx_v2.thinknxg_kx_v2.custom_script.due_settlement.main",
             "thinknxg_kx_v2.thinknxg_kx_v2.custom_script.grn_creation.main",
