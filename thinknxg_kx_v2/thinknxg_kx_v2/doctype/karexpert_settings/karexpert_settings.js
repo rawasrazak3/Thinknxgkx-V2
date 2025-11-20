@@ -35,7 +35,7 @@ frappe.ui.form.on("Karexpert  Table", {
 				message: "Advance Deposit Refund Created"
 			},
 			"OP PHARMACY BILLING": {
-				method: "thinknxg_kx_v2.thinknxg_kx_v2.custom_script.pharmacy_bill.main",
+				method: "thinknxg_kx_v2.thinknxg_kx_v2.custom_script.pharmacy_bill.queue_job",
 				message: "OP pharmacy Sales Invoice Created"
 			},
 			"GRN CREATION SUMMARY": {
@@ -144,7 +144,7 @@ frappe.ui.form.on("Karexpert Settings", {
 							message: "Advance Deposit Refund Created"
 						},
 						"OP PHARMACY BILLING": {
-							method: "thinknxg_kx_v2.thinknxg_kx_v2.custom_script.pharmacy_bill.main",
+							method: "thinknxg_kx_v2.thinknxg_kx_v2.custom_script.pharmacy_bill.queue_job",
 							message: "OP pharmacy Sales Invoice Created"
 						},
 						"GRN CREATION SUMMARY": {
