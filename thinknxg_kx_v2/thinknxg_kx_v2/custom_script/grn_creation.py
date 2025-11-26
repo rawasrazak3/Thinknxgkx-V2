@@ -426,6 +426,9 @@ def create_journal_entry(billing_data):
         dt = datetime.fromtimestamp(date_ts / 1000.0, gmt_plus_4)
         formatted_date = dt.strftime('%Y-%m-%d')
         posting_time = dt.strftime('%H:%M:%S')
+        grn_date_raw = float(billing_data["grn_date"])
+        dt = datetime.fromtimestamp(grn_date_raw / 1000.0, gmt_plus_4)
+        grn_date = dt.strftime('%Y-%m-%d')
 
         bill_no = billing_data["billNo"]
         grn_number = billing_data["grn_number"]
@@ -460,6 +463,7 @@ def create_journal_entry(billing_data):
             "doctype": "Journal Entry",
             "posting_date": formatted_date,
             "posting_time": posting_time,
+            "custom_grn_date":grn_date,
             "naming_series": "KX-JV-.YYYY.-",
             "custom_bill_category": "GRN",
             "company": company,
