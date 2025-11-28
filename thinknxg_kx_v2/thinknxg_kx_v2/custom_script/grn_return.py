@@ -369,9 +369,10 @@ def group_return_items_by_drReturnNo(return_items):
                 "first_item": item
             }
         
-        net_purchase_value = float(item.get("netPurchaseValue", 0) or 0.0)
+        net_purchase_value = float(item.get("taxable_amount", 0) or 0.0)
         total_qty = float(item.get("returnQuantity", 0) or 0.0)
-        tax = float(item.get("tax", 0) or 0.0) * total_qty
+        tax = float(item.get("netTaxValue", 0) or 0.0)
+        # tax = float(item.get("tax", 0) or 0.0) * total_qty
         
         grouped_returns[dr_return_no]["items"].append(item)
         grouped_returns[dr_return_no]["total_net_purchase_value"] += net_purchase_value
@@ -403,9 +404,14 @@ def create_journal_entry_for_return(grouped_return):
     dt = datetime.fromtimestamp(date_ts / 1000.0, gmt_plus_4)
     posting_date = dt.strftime('%Y-%m-%d')
     posting_time = dt.strftime('%H:%M:%S')
+    grn_date_raw = float(grouped_return["first_item"]["grn_date"])
+    dt = datetime.fromtimestamp(grn_date_raw / 1000.0, gmt_plus_4)
+    grn_date = dt.strftime('%Y-%m-%d')
 
     total_amount = grouped_return["total_net_purchase_value"]
+    print("total amount--",total_amount)
     tax_amount = grouped_return["total_tax"]
+    print("total tax---",tax_amount)
     if total_amount <= 0:
         frappe.log(f"Total amount for drReturnNo {dr_return_no} is zero or negative, skipping.")
         return
@@ -433,6 +439,7 @@ def create_journal_entry_for_return(grouped_return):
         "doctype": "Journal Entry",
         "voucher_type": "Debit Note",
         "posting_date": posting_date,
+        "custom_grn_date":grn_date,
         "naming_series": "KX-JV-.YYYY.-",
         "custom_bill_category": "GRN Return",
         "custom_return_no": dr_return_no,
@@ -446,7 +453,7 @@ def create_journal_entry_for_return(grouped_return):
                 "account": creditor_account,
                 "party_type": "Supplier",
                 "party": supplier_name,
-                "debit_in_account_currency": total_amount,
+                "debit_in_account_currency": total_amount + tax_amount,
                 "reference_type": "Journal Entry",
                 "reference_name": reference_invoice,
             },
@@ -460,8 +467,8 @@ def create_journal_entry_for_return(grouped_return):
     if tax_amount:
         je.append("accounts",{
             "account": vat_account,
-            "debit_in_account_currency": tax_amount,
-            "credit_in_account_currency": 0
+            "debit_in_account_currency": 0,
+            "credit_in_account_currency": tax_amount
         })
     try:
         je.insert(ignore_permissions=True)
