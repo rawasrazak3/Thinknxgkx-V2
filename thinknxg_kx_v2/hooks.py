@@ -31,6 +31,11 @@ fixtures = [
             }
     },
 ]
+
+doctype_js = {
+    "Payment Entry": "public/js/payment_entry.js"
+}
+
 # include js, css files in header of desk.html
 # app_include_css = "/assets/thinknxg_kx_v2/css/thinknxg_kx_v2.css"
 # app_include_js = "/assets/thinknxg_kx_v2/js/thinknxg_kx_v2.js"
