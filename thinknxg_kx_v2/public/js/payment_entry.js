@@ -1,3 +1,5 @@
+
+
 frappe.ui.form.on("Payment Entry Reference", {
     form_render: function(frm, cdt, cdn) {
         let row = locals[cdt][cdn];
@@ -11,6 +13,4 @@ frappe.ui.form.on("Payment Entry Reference", {
         }
     }
 });
-
-
 
