@@ -51,6 +51,14 @@ frappe.query_reports["Age-wise PDC Report"] = {
             "reqd": 0  // Optional filter, not required
         },
         {
+            "fieldname": "status",
+            "label": __("Status"),
+            "fieldtype": "Select",
+            "options": ["Draft", "Submitted", "Cancelled"],
+            "default": "Submitted",
+            "reqd": 0
+        },
+        {
             "fieldname": "from_date",
             "label": __("From Date"),
             "fieldtype": "Date",
