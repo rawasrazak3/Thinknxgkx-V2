@@ -1,14 +1,6 @@
 # Copyright (c) 2026, Kreatao - thinkNXG and contributors
 # For license information, please see license.txt
 
-# import frappe
-
-
-# def execute(filters=None):
-# 	columns, data = [], []
-# 	return columns, data
-
-
 from datetime import timedelta
 
 import frappe
@@ -349,6 +341,9 @@ def get_data(filters):
 
     if filters.get("employee"):
         emp_filters["name"] = filters.employee
+    
+    if filters.get("department"):
+        emp_filters["department"] = filters.department
 
     employees = frappe.get_all(
         "Employee",
@@ -422,14 +417,20 @@ def get_data(filters):
 
     
             # NO ATTENDANCE → CHECK SHIFT ASSIGNMENT
-            shift_exists = frappe.db.exists(
-                "Shift Assignment",
-                {
-                    "employee": emp.name,
-                    "start_date": ["<=", date],
-                    "docstatus": 1,
-                },
-            )
+            # shift_exists = frappe.db.exists(
+            #     "Shift Assignment",
+            #     {
+            #         "employee": emp.name,
+            #         "start_date": ["<=", date],
+            #         "docstatus": 1,
+            #     },
+            # )
+
+            # NO ATTENDANCE
+            # If shift filter is applied → DO NOT create dummy rows
+            if filters.get("shift"):
+                continue
+
 
             dummy_entry = frappe._dict({
                     "status": "",
@@ -441,7 +442,7 @@ def get_data(filters):
                 date=date,
                 employee=emp.name,
                 company=emp.company
-)
+            )
 
             final_data.append(
                 frappe._dict(
