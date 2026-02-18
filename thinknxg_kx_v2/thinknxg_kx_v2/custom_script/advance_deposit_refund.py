@@ -215,7 +215,8 @@ def create_advance_refund_entry(billing_data):
                 {
                     "account": paid_to_account,
                     "credit_in_account_currency": amount,
-                    "account_currency": paid_to_account_currency
+                    "account_currency": paid_to_account_currency,
+                    "project": "UHID Advance Refund"
                 },
                 {
                     "account": customer_advance_account,
@@ -223,7 +224,8 @@ def create_advance_refund_entry(billing_data):
                     "account_currency": paid_to_account_currency,
                     "party_type": "Customer",
                     "party": customer,
-                    # "is_advance":"Yes"
+                    # "is_advance":"Yes",
+                    "project": "UHID Advance Refund"
                 }
             ]
         })

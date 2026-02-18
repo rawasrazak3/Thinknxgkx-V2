@@ -174,6 +174,7 @@ def create_journal_entry(billing_data):
                     "account": paid_to_account,
                     "debit_in_account_currency": amount,
                     "account_currency": paid_to_account_currency,
+                    "project": "UHID Advance"
                 },
                 {
                     "account": customer_advance_account,
@@ -182,6 +183,7 @@ def create_journal_entry(billing_data):
                     "party_type": "Customer",
                     "party": customer,
                     "is_advance": "Yes",
+                    "project": "UHID Advance"
                 },
             ],
         })

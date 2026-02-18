@@ -407,7 +407,8 @@ def create_journal_entry_from_pharmacy_refund(refund_data):
             "credit_in_account_currency": 0,
             "reference_type": "Journal Entry",
             "reference_name": reference_invoice,
-            "cost_center": cost_center
+            "cost_center": cost_center,
+            "project": "PHARMACY REFUND"
             # "party_type": "Customer",
             # "party": customer
         },
@@ -419,6 +420,7 @@ def create_journal_entry_from_pharmacy_refund(refund_data):
             "account": vat_account,
             "debit_in_account_currency": tax_amount,
             "credit_in_account_currency": 0,
+            "project": "PHARMACY REFUND"
         })
     if payer_type == "credit" and authorized_amount > 0:
         je_accounts.append({
@@ -427,7 +429,8 @@ def create_journal_entry_from_pharmacy_refund(refund_data):
                 "credit_in_account_currency":authorized_amount,
                 "party_type": "Customer",
                 "party": customer,
-                "cost_center": cost_center
+                "cost_center": cost_center,
+                "project": "PHARMACY REFUND"
             })
     # UEPR reversal
     if total_uepr > 0:
@@ -436,13 +439,15 @@ def create_journal_entry_from_pharmacy_refund(refund_data):
                 "account": stock_acc,
                 "debit_in_account_currency": total_uepr,
                 "credit_in_account_currency": 0,
-                "cost_center": cost_center
+                "cost_center": cost_center,
+                "project": "PHARMACY REFUND"
             },
             {
                 "account": default_expense_account,
                 "debit_in_account_currency": 0,
                 "credit_in_account_currency": total_uepr,
-                "cost_center": cost_center
+                "cost_center": cost_center,
+                "project": "PHARMACY REFUND"
             }
         ])
 
@@ -458,7 +463,8 @@ def create_journal_entry_from_pharmacy_refund(refund_data):
                 "account": cash_account,
                 "debit_in_account_currency": 0,
                 "credit_in_account_currency": amount,
-                "cost_center": cost_center
+                "cost_center": cost_center,
+                "project": "PHARMACY REFUND"
             })
         elif mode == "credit":
             je_accounts.append({
@@ -467,21 +473,24 @@ def create_journal_entry_from_pharmacy_refund(refund_data):
                 "credit_in_account_currency":amount,
                 "party_type": "Customer",
                 "party": customer,
-                "cost_center": cost_center
+                "cost_center": cost_center,
+                "project": "PHARMACY REFUND"
             })
         elif mode in ["upi", "card_payment", "bank","credit_card"]:
             je_accounts.append({
                 "account": bank_account,
                 "debit_in_account_currency": 0,
                 "credit_in_account_currency": amount,
-                "cost_center": cost_center
+                "cost_center": cost_center,
+                "project": "PHARMACY REFUND"
             })
         elif mode == "ip advance":
             je_accounts.append({
                 "account": "Advance Received - OP",
                 "debit_in_account_currency": 0,
                 "credit_in_account_currency": amount,
-                "cost_center": cost_center
+                "cost_center": cost_center,
+                "project": "PHARMACY REFUND"
             })
 
     # --- Create Refund JE ---
@@ -520,7 +529,8 @@ def create_journal_entry_from_pharmacy_refund(refund_data):
                     "credit_in_account_currency": difference,
                     "debit_in_account_currency": 0,
                     "account_currency": je.accounts[0].account_currency,
-                    "cost_center": cost_center
+                    "cost_center": cost_center,
+                    "project": "PHARMACY REFUND"
                 })
             else:
                 je.append("accounts", {
@@ -528,7 +538,8 @@ def create_journal_entry_from_pharmacy_refund(refund_data):
                     "debit_in_account_currency": difference,
                     "credit_in_account_currency": 0,
                     "account_currency": je.accounts[0].account_currency,
-                    "cost_center": cost_center
+                    "cost_center": cost_center,
+                    "project": "PHARMACY REFUND"
                 })
         je.submit()
         frappe.db.commit()

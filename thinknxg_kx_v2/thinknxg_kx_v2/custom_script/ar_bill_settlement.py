@@ -190,7 +190,8 @@ def create_journal_entry(billing_data):
             "party_type": "Customer",
             "party": customer,
             "credit_in_account_currency": auth_amount,
-            "debit_in_account_currency": 0
+            "debit_in_account_currency": 0,
+            "project": "AR BILL SETTLEMENT"
         }
         je_entries.append(credit_entry)
         frappe.logger().info(f"[JE DEBUG] Added Credit Entry: {credit_entry}")
@@ -200,6 +201,7 @@ def create_journal_entry(billing_data):
                 "account": write_off_account,  # Replace with actual bank account
                 "debit_in_account_currency": write_off_amount,
                 "credit_in_account_currency": 0,
+                "project": "AR BILL SETTLEMENT"
             })
 
         #Debit each payment mode from payment_details
@@ -226,7 +228,8 @@ def create_journal_entry(billing_data):
             debit_entry = {
                 "account": account,
                 "debit_in_account_currency": amount,
-                "credit_in_account_currency": 0
+                "credit_in_account_currency": 0,
+                "project": "AR BILL SETTLEMENT"
             }
             je_entries.append(debit_entry)
             frappe.logger().info(f"[JE DEBUG] Added Debit Entry: {debit_entry}")

@@ -456,11 +456,13 @@ def create_journal_entry_for_return(grouped_return):
                 "debit_in_account_currency": total_amount + tax_amount,
                 "reference_type": "Journal Entry",
                 "reference_name": reference_invoice,
+                "project": "GRN Return"
             },
             {
                 "account": stock_account,
                 "credit_in_account_currency": total_amount,
-                "cost_center": cost_center
+                "cost_center": cost_center,
+                "project": "GRN Return"
             }
         ]
     })
@@ -468,7 +470,8 @@ def create_journal_entry_for_return(grouped_return):
         je.append("accounts",{
             "account": vat_account,
             "debit_in_account_currency": 0,
-            "credit_in_account_currency": tax_amount
+            "credit_in_account_currency": tax_amount,
+            "project": "GRN Return"
         })
     try:
         je.insert(ignore_permissions=True)
