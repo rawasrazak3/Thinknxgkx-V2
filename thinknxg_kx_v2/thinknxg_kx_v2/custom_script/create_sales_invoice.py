@@ -259,7 +259,8 @@ def create_sales_invoice(billing_data):
         "qty": 1,
         "rate": item_rate,
         "amount": item_rate,
-        "cost_center": cost_center
+        "cost_center": cost_center,
+        "project": "OP Billing"
     }]
 
     discount_amount = billing_data["selling_amount"] - billing_data["total_amount"]
@@ -271,7 +272,8 @@ def create_sales_invoice(billing_data):
         "account_head": "2370 - VAT 5% - MH" if tax_amount > 0 else "2360 - VAT 0% - MH",  # Change to your tax account
         # "rate": 0 if tax_amount == 0 else (tax_amount / billing_data["total_amount"]) * 100,
         "tax_amount": 0 if tax_amount == 0 else tax_amount,
-        "description": "2370 - VAT 5% - MH" if tax_amount > 0 else "2360 - VAT 0% - MH"
+        "description": "2370 - VAT 5% - MH" if tax_amount > 0 else "2360 - VAT 0% - MH",
+        "project": "OP Billing"
     }]
     
     sales_invoice = frappe.get_doc({
@@ -420,7 +422,8 @@ def create_journal_entry(sales_invoice_name, billing_data):
             "credit_in_account_currency": payer_amount,
             "reference_type": "Sales Invoice",
             "reference_name":sales_invoice_name,
-            "cost_center":item_cost_center
+            "cost_center":item_cost_center,
+            "project": "OP Billing"
 
         })
     # Handling Credit Payment Mode
@@ -432,6 +435,7 @@ def create_journal_entry(sales_invoice_name, billing_data):
             "party": customer_name,
             "debit_in_account_currency": authorized_amount,
             "credit_in_account_currency": 0,
+            "project": "OP Billing"
                   })
         
 
@@ -443,7 +447,8 @@ def create_journal_entry(sales_invoice_name, billing_data):
                 "debit_in_account_currency": payment["amount"],
                 "credit_in_account_currency": 0,
                 # "reference_type": "Sales Invoice",
-                # "reference_name":sales_invoice_name
+                # "reference_name":sales_invoice_name,
+                "project": "OP Billing"
             })
 
     # Handling Other Payment Modes (UPI, Card, etc.)
@@ -456,7 +461,8 @@ def create_journal_entry(sales_invoice_name, billing_data):
             "debit_in_account_currency": bank_payment_total,
             "credit_in_account_currency": 0,
             # "reference_type": "Sales Invoice",
-            # "reference_name":sales_invoice_name
+            # "reference_name":sales_invoice_name,
+            "project": "OP Billing"
         })
 
     # Create Journal Entry if there are valid transactions

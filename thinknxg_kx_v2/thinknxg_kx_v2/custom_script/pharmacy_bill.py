@@ -504,7 +504,8 @@ def create_journal_entry_from_billing(billing_data):
             "account": credit_account,
             "debit_in_account_currency": 0,
             "credit_in_account_currency": item_rate,
-            "cost_center": cost_center
+            "cost_center": cost_center,
+            "project": "PHARMACY"
         },
     ]
     # Handling Credit Payment Mode
@@ -516,7 +517,8 @@ def create_journal_entry_from_billing(billing_data):
             "party": customer,
             "debit_in_account_currency": authorized_amount,
             "credit_in_account_currency": 0,
-            "cost_center": cost_center
+            "cost_center": cost_center,
+            "project": "PHARMACY"
         })
         
 
@@ -527,7 +529,8 @@ def create_journal_entry_from_billing(billing_data):
                 "account": cash_account,  # Replace with actual cash account
                 "debit_in_account_currency": payment["amount"],
                 "credit_in_account_currency": 0,
-                "cost_center": cost_center
+                "cost_center": cost_center,
+                "project": "PHARMACY"
             })
 
     # Handling Advance Payment Mode
@@ -537,7 +540,8 @@ def create_journal_entry_from_billing(billing_data):
                 "account": "Advance Received - K",  # Replace with actual advance account
                 "debit_in_account_currency": payment["amount"],
                 "credit_in_account_currency": 0,
-                "cost_center": cost_center
+                "cost_center": cost_center,
+                "project": "PHARMACY"
             })
 
     # Handling Other Payment Modes (UPI, Card, etc.)
@@ -549,9 +553,10 @@ def create_journal_entry_from_billing(billing_data):
             "account": bank_account,  # Replace with actual bank account
             "debit_in_account_currency": bank_payment_total,
             "credit_in_account_currency": 0,
-            "cost_center": cost_center
+            "cost_center": cost_center,
             # "reference_type": "Sales Invoice",
-            # "reference_name":sales_invoice_name
+            # "reference_name":sales_invoice_name,
+            "project": "PHARMACY"
         })
 
     # Tax line
@@ -562,6 +567,7 @@ def create_journal_entry_from_billing(billing_data):
             "account": vat_account,
             "debit_in_account_currency": 0,
             "credit_in_account_currency": tax_amount,
+            "project": "PHARMACY"
         })
     if total_uepr > 0:
         je_accounts.extend([
@@ -569,13 +575,15 @@ def create_journal_entry_from_billing(billing_data):
                 "account": default_expense_account,
                 "debit_in_account_currency": total_uepr,
                 "credit_in_account_currency": 0,
-                "cost_center": cost_center
+                "cost_center": cost_center,
+                "project": "PHARMACY"
             },
             {
                 "account": stock_acc,
                 "debit_in_account_currency": 0,
                 "credit_in_account_currency": total_uepr,
-                "cost_center": cost_center
+                "cost_center": cost_center,
+                "project": "PHARMACY"
             }
         ])
 
@@ -634,7 +642,8 @@ def create_journal_entry_from_billing(billing_data):
                     "credit_in_account_currency": difference,
                     "debit_in_account_currency": 0,
                     "account_currency": je.accounts[0].account_currency,
-                    "cost_center": cost_center
+                    "cost_center": cost_center,
+                    "project": "PHARMACY"
                 })
             else:
                 je.append("accounts", {
@@ -642,7 +651,8 @@ def create_journal_entry_from_billing(billing_data):
                     "debit_in_account_currency": difference,
                     "credit_in_account_currency": 0,
                     "account_currency": je.accounts[0].account_currency,
-                    "cost_center": cost_center
+                    "cost_center": cost_center,
+                    "project": "PHARMACY"
                 })
 
         # refresh totals

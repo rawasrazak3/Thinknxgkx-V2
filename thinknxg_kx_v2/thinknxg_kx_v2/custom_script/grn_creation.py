@@ -479,13 +479,15 @@ def create_journal_entry(billing_data):
                     "party_type": "Supplier",
                     "party": supplier,
                     "debit_in_account_currency": 0,
-                    "credit_in_account_currency": total_net_amount
+                    "credit_in_account_currency": total_net_amount,
+                    "project": "GRN"
                 },
                 {
                     "account": stock_acc,
                     "debit_in_account_currency": total_net_amount - total_tax,
                     "credit_in_account_currency": 0,
-                    "cost_center": cost_center
+                    "cost_center": cost_center,
+                    "project": "GRN"
                 }
             ]
         })
@@ -494,7 +496,8 @@ def create_journal_entry(billing_data):
             journal_entry.append("accounts",{
                 "account": vat_account,
                 "debit_in_account_currency": total_tax,
-                "credit_in_account_currency": 0
+                "credit_in_account_currency": 0,
+                "project": "GRN"
             })
 
         journal_entry.insert(ignore_permissions=True)

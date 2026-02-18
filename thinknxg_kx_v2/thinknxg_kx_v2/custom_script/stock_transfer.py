@@ -286,13 +286,15 @@ def create_journal_entry_from_billing_group(key, records, category):
         je.append("accounts", {
             "account": stock_acc1,
             "credit_in_account_currency": total_value,
-            "cost_center": cost_center1
+            "cost_center": cost_center1,
+            "project": "STOCK TRANSFER"
         })
         # To store → debit
         je.append("accounts", {
             "account": stock_acc2,
             "debit_in_account_currency": total_value,
-            "cost_center": cost_center2
+            "cost_center": cost_center2,
+            "project": "STOCK TRANSFER"
         })
 
     elif category == "STOCK RETURN":
@@ -300,12 +302,14 @@ def create_journal_entry_from_billing_group(key, records, category):
         je.append("accounts", {
             "account": stock_acc2,
             "credit_in_account_currency": total_value,
-            "cost_center": cost_center2
+            "cost_center": cost_center2,
+            "project": "STOCK RETURN"
         })
         je.append("accounts", {
             "account": stock_acc1,
             "debit_in_account_currency": total_value,
-            "cost_center": cost_center1
+            "cost_center": cost_center1,
+            "project": "STOCK RETURN"
         })
 
     je.save(ignore_permissions=True)
