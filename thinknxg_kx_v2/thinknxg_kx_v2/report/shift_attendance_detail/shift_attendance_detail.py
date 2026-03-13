@@ -1,7 +1,3 @@
-# Copyright (c) 2026, Kreatao - thinkNXG and contributors
-# For license information, please see license.txt
-
-from datetime import timedelta
 
 import frappe
 from frappe import _
@@ -15,6 +11,7 @@ STATUS_MAP = {
     "Absent": "A",
     "Half Day/Other Half Absent": "HD/A",
     "Half Day/Other Half Present": "HD/P",
+    "Half Day": "HD",
     "Work From Home": "WFH",
     "On Leave": "L",
     "Holiday": "H",
@@ -39,41 +36,89 @@ def get_all_dates(from_date, to_date):
     return dates
 
 
-def is_holiday(date, company):
-    holiday_list = frappe.db.get_value("Company", company, "default_holiday_list")
-    if not holiday_list:
-        return False
-
+def is_on_leave(employee, date):
     return frappe.db.exists(
-        "Holiday",
-        {"parent": holiday_list, "holiday_date": date}
-    )
-
-def is_weekly_off(date, employee):
-    shift = frappe.db.get_value(
-        "Shift Assignment",
+        "Leave Application",
         {
             "employee": employee,
-            "start_date": ["<=", date],
-            "docstatus": 1
-        },
-        "shift_type",
-        order_by="start_date desc"
-    )
-
-    if not shift:
-        return False
-
-    week_day = date.strftime("%A")
-
-    return frappe.db.exists(
-        "Shift Type",
-        {
-            "name": shift,
-            "weekly_off": week_day
+            "from_date": ["<=", date],
+            "to_date": [">=", date],
+            "docstatus": 1,
+            "status": "Approved",
         }
     )
 
+def is_holiday(date, employee, company):
+
+    emp_holiday_list = frappe.db.get_value("Employee", employee, "holiday_list")
+
+    if emp_holiday_list:
+        holiday = frappe.db.get_value(
+            "Holiday",
+            {"parent": emp_holiday_list, "holiday_date": date},
+            ["name", "weekly_off"],
+            as_dict=True
+        )
+
+        if holiday and not holiday.weekly_off:
+            return True
+
+    company_holiday_list = frappe.db.get_value(
+        "Company", company, "default_holiday_list"
+    )
+
+    if company_holiday_list:
+        holiday = frappe.db.get_value(
+            "Holiday",
+            {"parent": company_holiday_list, "holiday_date": date},
+            ["name", "weekly_off"],
+            as_dict=True
+        )
+
+        if holiday and not holiday.weekly_off:
+            return True
+
+    return False
+
+def is_weekly_off(date, employee, company):
+
+    # Employee Holiday List
+    emp_holiday_list = frappe.db.get_value(
+        "Employee", employee, "holiday_list"
+    )
+
+    if emp_holiday_list:
+        weekly_off = frappe.db.get_value(
+            "Holiday",
+            {
+                "parent": emp_holiday_list,
+                "holiday_date": date
+            },
+            "weekly_off"
+        )
+
+        if weekly_off:
+            return True
+
+    # Company Holiday List (fallback)
+    company_holiday_list = frappe.db.get_value(
+        "Company", company, "default_holiday_list"
+    )
+
+    if company_holiday_list:
+        weekly_off = frappe.db.get_value(
+            "Holiday",
+            {
+                "parent": company_holiday_list,
+                "holiday_date": date
+            },
+            "weekly_off"
+        )
+
+        if weekly_off:
+            return True
+
+    return False
 
 def execute(filters=None):
     columns = get_columns()
@@ -245,35 +290,37 @@ def has_checkin(employee, date):
 
 
 def resolve_final_status(entry, date, employee, company):
-    """
-    Monthly Attendance–style status resolver
-    """
 
-    # Base flags
-    is_hol = is_holiday(date, company)
-    is_wo = is_weekly_off(date, employee)
+    is_hol = is_holiday(date, employee, company)
+    is_wo = is_weekly_off(date, employee, company)
+    on_leave = is_on_leave(employee, date)
 
-    has_shift = frappe.db.exists(
+    shift_assignments = frappe.get_all(
         "Shift Assignment",
-        {
+        filters={
             "employee": employee,
             "start_date": ["<=", date],
             "docstatus": 1,
-        }
+        },
+        or_filters=[
+            {"end_date": [">=", date]},
+            {"end_date": ["is", "not set"]},
+        ],
+        limit=1,
     )
 
-    full_status = entry.status
+    shift_exists = True if shift_assignments else False
 
+    full_status = entry.status or ""
 
-    # Half Day handling
-    if entry.status == "Half Day":
+    # Half Day
+    if full_status == "Half Day":
         if getattr(entry, "half_day_status", None) == "Present":
             full_status = "Half Day/Other Half Present"
         elif getattr(entry, "half_day_status", None) == "Absent":
             full_status = "Half Day/Other Half Absent"
 
-
-    # Attendance Request overrides
+    # Attendance Request Overrides
     if getattr(entry, "reason", None) == "Work From Home":
         full_status = "Work From Home"
 
@@ -285,24 +332,32 @@ def resolve_final_status(entry, date, employee, company):
         else:
             full_status = "On Duty"
 
+    # No attendance
+    if not full_status:
 
-    # Holiday / Weekly Off
-    else:
-        if is_hol:
+        if on_leave:
+            full_status = "On Leave"
+
+        elif is_hol:
             full_status = "Holiday"
+
         elif is_wo:
             full_status = "Weekly Off"
 
-    
-    # Off Shift 
+        elif shift_exists:
+            full_status = "Absent"
+
+        else:
+            full_status = ""
+
+    # Off Shift
     checkin_exists = has_checkin(employee, date)
 
-    if checkin_exists and not entry.shift:
+    if not shift_exists and checkin_exists:
         if full_status in ("On Duty", "Holiday On Duty", "Weekly Off On Duty"):
             full_status = "Off Shift On Duty"
         else:
             full_status = "Off Shift"
-
 
     return STATUS_MAP.get(full_status, "")
 
@@ -415,16 +470,6 @@ def get_data(filters):
                 final_data.append(entry)
                 continue
 
-    
-            # NO ATTENDANCE → CHECK SHIFT ASSIGNMENT
-            # shift_exists = frappe.db.exists(
-            #     "Shift Assignment",
-            #     {
-            #         "employee": emp.name,
-            #         "start_date": ["<=", date],
-            #         "docstatus": 1,
-            #     },
-            # )
 
             # NO ATTENDANCE
             # If shift filter is applied → DO NOT create dummy rows
@@ -481,11 +526,11 @@ def get_attendance_status_for_detailed_view(employee: str, filters, employee_att
             if status == "Half Day":
                 half_day_status = status_entry.get("half_day_status") if isinstance(status_entry, dict) else None
                 if half_day_status == "Present":
-                    status = "HD/P"
+                    status = "Half Day/Other Half Present"
                 elif half_day_status == "Absent":
-                    status = "HD/A"
+                    status = "Half Day/Other Half Absent"
                 else:
-                    status = "HD"
+                    status = "Half Day"
 
             # ---- On Duty / Off Shift ----
             elif status == "On Duty":
@@ -498,7 +543,12 @@ def get_attendance_status_for_detailed_view(employee: str, filters, employee_att
                 status = "H" if d in holidays else ""
 
             # ---- Map to abbreviation for display ----
-            abbr = STATUS_MAP.get(status, "")
+            # abbr = STATUS_MAP.get(status, "")
+            if status in STATUS_MAP.values():
+                abbr = status
+            else:
+                abbr = STATUS_MAP.get(status, "")
+
             row[d.strftime("%d-%m-%Y")] = abbr
 
         attendance_values.append(row)
@@ -507,7 +557,7 @@ def get_attendance_status_for_detailed_view(employee: str, filters, employee_att
 
 
 def get_report_summary(data):
-    present_records = half_day_records = absent_records = leave_records = od_records = os_records = 0
+    present_records = half_day_records = absent_records = leave_records = od_records = os_records = wfh_records = holiday_records = weekly_off_records = 0
     late_entries = early_exits = 0
 
     for entry in data:
@@ -527,9 +577,13 @@ def get_report_summary(data):
         elif st == "OD":
             od_records += 1
         elif st == "WFH":
-            od_records += 1
+            wfh_records += 1
         elif st == "OS":
             os_records += 1
+        elif st == "H":
+            holiday_records += 1
+        elif st == "WO":
+            weekly_off_records += 1
 
         if getattr(entry, "late_entry", 0):
             late_entries += 1
@@ -542,8 +596,10 @@ def get_report_summary(data):
         {"value": absent_records, "label": _("Absent"), "datatype": "Int", "indicator": "Red"},
         {"value": leave_records, "label": _("Leave"), "datatype": "Int", "indicator": "Orange"},
         {"value": od_records, "label": _("On Duty"), "datatype": "Int", "indicator": "#3187D8"},
-        {"value": od_records, "label": _("Work From Home"), "datatype": "Int", "indicator": "#3187D8"},
+        {"value": wfh_records, "label": _("Work From Home"), "datatype": "Int", "indicator": "#3187D8"},
         {"value": os_records, "label": _("Off Shift"), "datatype": "Int", "indicator": "#914EE3"},
+        # {"value": holiday_records, "label": _("Holiday"), "datatype": "Int", "indicator": "#00B8D9"},
+        # {"value": weekly_off_records, "label": _("Weekly Off"), "datatype": "Int", "indicator": "#7E57C2"},
         {"value": late_entries, "label": _("Late Entries"), "datatype": "Int", "indicator": "Red"},
         {"value": early_exits, "label": _("Early Exits"), "datatype": "Int", "indicator": "Red"},
     ]
@@ -584,7 +640,7 @@ def get_query(filters):
         .left_join(checkin)
         .on(checkin.attendance == attendance.name)
 
-        .inner_join(shift_type)
+        .left_join(shift_type)
         .on(attendance.shift == shift_type.name)
         .select(
             attendance.name,
@@ -632,102 +688,31 @@ def get_query(filters):
     return query
 
 
-# def update_data(data, filters):
-#     for d in data:
-#         if not d.get("shift"):
-#             continue
-
-#         update_late_entry(d, filters.consider_grace_period)
-#         update_early_exit(d, filters.consider_grace_period)
-
-#         update_first_second_shift(d)    #first and second shift calculation
-#         update_first_second_shift_variances(d)   #first shift early exit and second shift late entry calculation
-
-#         d.working_hours = format_float_precision(d.working_hours)
-#         d.in_time, d.out_time = format_in_out_time(d.in_time, d.out_time, d.attendance_date)
-#         d.shift_start, d.shift_end = convert_datetime_to_time_for_same_date(d.shift_start, d.shift_end)
-#         d.shift_actual_start, d.shift_actual_end = convert_datetime_to_time_for_same_date(
-#             d.shift_actual_start, d.shift_actual_end
-#         )
-#     return data
-
 def update_data(data, filters):
     for d in data:
 
-        # --- Only apply shift-based calculations if a shift exists ---
-        if d.get("shift"):
+        if d.get("shift") and d.get("shift_start") and d.get("shift_end"):
+
             update_late_entry(d, filters.consider_grace_period)
             update_early_exit(d, filters.consider_grace_period)
 
-            update_first_second_shift(d)    # first and second shift calculation
-            update_first_second_shift_variances(d)   # first shift early exit and second shift late entry calculation
+            update_first_second_shift(d)
+            update_first_second_shift_variances(d)
 
-            d.shift_start, d.shift_end = convert_datetime_to_time_for_same_date(d.shift_start, d.shift_end)
+            d.shift_start, d.shift_end = convert_datetime_to_time_for_same_date(
+                d.shift_start, d.shift_end
+            )
+
             d.shift_actual_start, d.shift_actual_end = convert_datetime_to_time_for_same_date(
                 d.shift_actual_start, d.shift_actual_end
             )
 
-        # --- Format working hours ---
+        d.in_time, d.out_time = format_in_out_time(
+            d.in_time, d.out_time, d.attendance_date
+        )
+
+        # SAME AS STANDARD ERPNext
         d.working_hours = format_float_precision(d.working_hours)
-
-        # --- Format in/out time ---
-        d.in_time, d.out_time = format_in_out_time(d.in_time, d.out_time, d.attendance_date)
-
-        # --- Handle Off Shift IN/OUT ---
-        # if not d.get("shift") or d.status in ("OS", "OS/OD"):
-        #     in_time, out_time = get_off_shift_in_out(d.employee, d.attendance_date)
-
-        #     # Extract only the time part
-        #     if in_time:
-        #         in_time = in_time.time() if isinstance(in_time, datetime) else in_time
-        #     if out_time:
-        #         out_time = out_time.time() if isinstance(out_time, datetime) else out_time
-
-        #     d.in_time = in_time
-        #     d.out_time = out_time
-        #     # Calculate working hours
-        #     if in_time and out_time:
-        #         # Convert to datetime on the same date for subtraction
-        #         start_dt = datetime.combine(d.attendance_date, in_time)
-        #         end_dt = datetime.combine(d.attendance_date, out_time)
-        #         d.working_hours = format_duration((end_dt - start_dt).total_seconds())
-        #     else:
-        #         d.working_hours = 0
-        
-
-        if not d.get("shift") or d.status in ("OS", "OS/OD"):
-            in_time, out_time = get_off_shift_in_out(d.employee, d.attendance_date)
-
-            # Extract only time
-            in_time_time = in_time.time() if in_time else None
-            out_time_time = out_time.time() if out_time else None
-
-            d.in_time = in_time_time
-            d.out_time = out_time_time
-
-            # Working hours calculation
-            total_seconds = 0
-
-            # First shift segment
-            if in_time_time and getattr(d, "first_shift_end", None):
-                start_dt = datetime.combine(d.attendance_date, in_time_time)
-                end_dt = datetime.combine(d.attendance_date, d.first_shift_end)
-                total_seconds += (end_dt - start_dt).total_seconds()
-
-            # Second shift segment
-            if getattr(d, "second_shift_start", None) and out_time_time:
-                start_dt = datetime.combine(d.attendance_date, d.second_shift_start)
-                end_dt = datetime.combine(d.attendance_date, out_time_time)
-                total_seconds += (end_dt - start_dt).total_seconds()
-
-            # If no first/second shift times, use overall in/out
-            if total_seconds == 0 and in_time_time and out_time_time:
-                start_dt = datetime.combine(d.attendance_date, in_time_time)
-                end_dt = datetime.combine(d.attendance_date, out_time_time)
-                total_seconds = (end_dt - start_dt).total_seconds()
-
-            d.working_hours = format_duration(total_seconds)
-
 
     return data
 
@@ -748,39 +733,79 @@ def format_in_out_time(in_time, out_time, attendance_date):
 
 
 def convert_datetime_to_time_for_same_date(start, end):
-    if start and end and start.date() == end.date():
-        start = start.time()
-        end = end.time()
-    else:
-        start = format_datetime(start)
-        end = format_datetime(end)
+    from datetime import datetime
+
+    def convert(val):
+        if not val:
+            return None
+
+        if isinstance(val, datetime):
+            return val.time()
+
+        if isinstance(val, str):
+            try:
+                return datetime.strptime(val, "%Y-%m-%d %H:%M:%S").time()
+            except:
+                try:
+                    return datetime.strptime(val, "%d-%m-%Y %H:%M:%S").time()
+                except:
+                    return None
+
+        return val
+
+    start = convert(start)
+    end = convert(end)
+
     return start, end
 
 
 def update_late_entry(entry, consider_grace_period):
+
+    entry.late_entry_hrs = None
+
+    if not entry.get("shift_start") or not entry.get("in_time"):
+        return
+
     if consider_grace_period:
         if entry.late_entry:
-            entry_grace_period = entry.late_entry_grace_period if entry.enable_late_entry_marking else 0
-            start_time = entry.shift_start + timedelta(minutes=entry_grace_period)
-            entry.late_entry_hrs = entry.in_time - start_time
-    elif entry.in_time and entry.in_time > entry.shift_start:
-        entry.late_entry = 1
-        entry.late_entry_hrs = entry.in_time - entry.shift_start
-    if entry.late_entry_hrs:
-        entry.late_entry_hrs = format_duration(entry.late_entry_hrs.total_seconds())
+            grace = entry.late_entry_grace_period if entry.enable_late_entry_marking else 0
+            start_time = entry.shift_start + timedelta(minutes=grace)
+            diff = entry.in_time - start_time
+        else:
+            return
+    else:
+        if entry.in_time > entry.shift_start:
+            entry.late_entry = 1
+            diff = entry.in_time - entry.shift_start
+        else:
+            return
+
+    entry.late_entry_hrs = format_duration(diff.total_seconds())
 
 
 def update_early_exit(entry, consider_grace_period):
+
+    entry.early_exit_hrs = None
+
+    if not entry.get("shift_end") or not entry.get("out_time"):
+        return
+
     if consider_grace_period:
         if entry.early_exit:
-            exit_grace_period = entry.early_exit_grace_period if entry.enable_early_exit_marking else 0
-            end_time = entry.shift_end - timedelta(minutes=exit_grace_period)
-            entry.early_exit_hrs = end_time - entry.out_time
-    elif entry.out_time and entry.out_time < entry.shift_end:
-        entry.early_exit = 1
-        entry.early_exit_hrs = entry.shift_end - entry.out_time
-    if entry.early_exit_hrs:
-        entry.early_exit_hrs = format_duration(entry.early_exit_hrs.total_seconds())
+            grace = entry.early_exit_grace_period if entry.enable_early_exit_marking else 0
+            end_time = entry.shift_end - timedelta(minutes=grace)
+            diff = end_time - entry.out_time
+        else:
+            return
+    else:
+        if entry.out_time < entry.shift_end:
+            entry.early_exit = 1
+            diff = entry.shift_end - entry.out_time
+        else:
+            return
+
+    if diff.total_seconds() > 0:
+        entry.early_exit_hrs = format_duration(diff.total_seconds())
 
 # convert timedelta to time
 def timedelta_to_time(td):
@@ -819,57 +844,87 @@ def get_off_shift_in_out(employee, attendance_date):
     return in_time, out_time
 
 
-# calculate first shift end and second shift 
 def update_first_second_shift(entry):
+
+    # Reset values
+    entry.first_shift_end = None
+    entry.second_shift_start = None
+
     if not entry.break_start or not entry.break_end:
         return
-
-    break_start = timedelta_to_time(entry.break_start)
-    break_end = timedelta_to_time(entry.break_end)
 
     checkins = get_employee_checkins(entry.employee, entry.attendance_date)
-    if not checkins:
+
+    # If only IN and OUT → do nothing
+    if not checkins or len(checkins) <= 2:
         return
 
-    first_shift_end = None
-    second_shift_start = None
-
-    for c in checkins:
-        t = c.time.time()
-
-        if t <= break_start:
-            first_shift_end = t
-
-        if t >= break_end and not second_shift_start:
-            second_shift_start = t
-
-    entry.first_shift_end = first_shift_end
-    entry.second_shift_start = second_shift_start
-
-
-# calculate first shift early exit and second shift late entry
-def update_first_second_shift_variances(entry):
-    # Safety checks
-    if not entry.break_start or not entry.break_end:
-        return
-
-    # Convert timedelta → time
     break_start = timedelta_to_time(entry.break_start)
     break_end   = timedelta_to_time(entry.break_end)
 
+    # Convert to time list
+    checkin_times = [c.time.time() for c in checkins]
+
+    # Remove first (IN) and last (OUT)
+    middle_times = checkin_times[1:-1]
+
+    if not middle_times:
+        return
+
+    # Helper to calculate nearest time
+    def nearest_time(target_time, time_list):
+        return min(
+            time_list,
+            key=lambda t: abs(
+                datetime.combine(entry.attendance_date, t) -
+                datetime.combine(entry.attendance_date, target_time)
+            )
+        )
+
+    # First Shift End → nearest to break_start
+    entry.first_shift_end = nearest_time(break_start, middle_times)
+
+    # Second Shift Start → nearest to break_end
+    entry.second_shift_start = nearest_time(break_end, middle_times)
+
+
+def update_first_second_shift_variances(entry):
+
+    # Reset values first (important to avoid old data)
+    entry.first_shift_early_exit = None
+    entry.second_shift_late_entry = None
+
+    if not entry.break_start or not entry.break_end:
+        return
+
+    # If shift split not calculated, skip
     if not entry.first_shift_end or not entry.second_shift_start:
         return
 
-    # ---- First Shift Early Exit ----
-    if entry.first_shift_end < break_start:
-        diff = datetime.combine(entry.attendance_date, break_start) - \
-               datetime.combine(entry.attendance_date, entry.first_shift_end)
-        entry.first_shift_early_exit = format_duration(diff.total_seconds())
+    break_start = timedelta_to_time(entry.break_start)
+    break_end   = timedelta_to_time(entry.break_end)
 
-    # ---- Second Shift Late Entry ----
-    if entry.second_shift_start > break_end:
-        diff = datetime.combine(entry.attendance_date, entry.second_shift_start) - \
-               datetime.combine(entry.attendance_date, break_end)
-        entry.second_shift_late_entry = format_duration(diff.total_seconds())
+    # Convert all to datetime for accurate comparison
+    break_start_dt = datetime.combine(entry.attendance_date, break_start)
+    break_end_dt   = datetime.combine(entry.attendance_date, break_end)
+
+    first_shift_end_dt = datetime.combine(entry.attendance_date, entry.first_shift_end)
+    second_shift_start_dt = datetime.combine(entry.attendance_date, entry.second_shift_start)
+
+    # -------------------------------------------------
+    # First Shift Early Exit
+    # Only if employee left BEFORE break_start
+    # -------------------------------------------------
+    if first_shift_end_dt < break_start_dt:
+        diff_seconds = (break_start_dt - first_shift_end_dt).total_seconds()
+        entry.first_shift_early_exit = format_duration(diff_seconds)
+
+    # -------------------------------------------------
+    # Second Shift Late Entry
+    # Only if employee returned AFTER break_end
+    # -------------------------------------------------
+    if second_shift_start_dt > break_end_dt:
+        diff_seconds = (second_shift_start_dt - break_end_dt).total_seconds()
+        entry.second_shift_late_entry = format_duration(diff_seconds)
 
 
