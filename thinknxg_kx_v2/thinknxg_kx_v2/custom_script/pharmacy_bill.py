@@ -12,7 +12,7 @@ from thinknxg_kx_v2.thinknxg_kx_v2.doctype.karexpert_settings.karexpert_settings
 def queue_job():
     frappe.enqueue(
         "thinknxg_kx_v2.thinknxg_kx_v2.custom_script.pharmacy_bill.main",
-        timeout=600  # 5 minutes, adjust as needed
+        timeout=1200  # 20 minutes, adjust as needed
     )
 
 billing_type = "OP PHARMACY BILLING"
@@ -346,14 +346,14 @@ def main():
             billing_data = fetch_op_billing(jwt_token, from_date, to_date, headers)
 
             if billing_data and "jsonResponse" in billing_data:
-                all_billing_data.extend(billing_data["jsonResponse"])
-            else:
-                frappe.log(f"No data returned for {facility_id}")
+            #     all_billing_data.extend(billing_data["jsonResponse"])
+            # else:
+            #     frappe.log(f"No data returned for {facility_id}")
 
             # ✅ Process all collected billing data
-            for billing in all_billing_data:
-                create_journal_entry_from_billing(billing["pharmacy_billing"])
-                
+                for billing in billing_data["jsonResponse"]:
+                    create_journal_entry_from_billing(billing["pharmacy_billing"])
+                    
             # Wait 5 seconds before processing the next facility
             time.sleep(5)
             frappe.log("All facility billing data processed successfully.")

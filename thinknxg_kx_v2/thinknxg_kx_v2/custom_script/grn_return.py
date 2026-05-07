@@ -371,8 +371,8 @@ def group_return_items_by_drReturnNo(return_items):
         
         net_purchase_value = float(item.get("taxable_amount", 0) or 0.0)
         total_qty = float(item.get("returnQuantity", 0) or 0.0)
-        tax = float(item.get("netTaxValue", 0) or 0.0)
-        # tax = float(item.get("tax", 0) or 0.0) * total_qty
+        # tax = float(item.get("netTaxValue", 0) or 0.0)
+        tax = float(item.get("tax", 0) or 0.0) * total_qty
         
         grouped_returns[dr_return_no]["items"].append(item)
         grouped_returns[dr_return_no]["total_net_purchase_value"] += net_purchase_value
