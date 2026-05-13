@@ -476,7 +476,7 @@ def create_journal_entry_from_pharmacy_refund(refund_data):
                 "cost_center": cost_center,
                 "project": "PHARMACY REFUND"
             })
-        elif mode in ["upi", "card_payment", "bank","credit_card"]:
+        elif mode in ["upi", "card_payment", "bank","credit_card","neft"]:
             je_accounts.append({
                 "account": bank_account,
                 "debit_in_account_currency": 0,
