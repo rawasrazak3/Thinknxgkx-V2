@@ -33,6 +33,7 @@ def get_columns():
 
 def get_data(filters):
     frappe.flags.ignore_cache = True
+    filters = filters or {}
     # Conditions based on user inputs
     conditions = []
 
@@ -54,6 +55,12 @@ def get_data(filters):
     if conditions:
         conditions = " AND " + conditions
 
+    status_map = {"Draft": 0, "Submitted": 1, "Cancelled": 2}
+    docstatus = status_map.get(filters.get("status"), 1)
+
+    params = dict(filters)
+    params["docstatus"] = docstatus
+
     # Fetch filtered payment entries
     pdc_entries = frappe.db.sql(f"""
         SELECT
@@ -65,18 +72,18 @@ def get_data(filters):
             pe.reference_date,
             pe.paid_amount,
             pe.mode_of_payment,
-            # pe.custom_cheque_issue_date,
+
             pe.remarks
         FROM
             `tabPayment Entry` pe
         WHERE
-            pe.docstatus = 1
-            AND pe.mode_of_payment IN ('Cheque BM', 'Cheque NBO', 'Bank Transfer NBO', 'Bank Transfer BM')
+            pe.docstatus = %(docstatus)s
+            
             AND pe.reference_date IS NOT NULL
             {conditions}
         ORDER BY
             pe.reference_date ASC
-    """, filters, as_dict=1)
+    """, params, as_dict=1)
 
     # Process the data and calculate age
     data = []
